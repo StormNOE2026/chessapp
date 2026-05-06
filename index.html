@@ -1,13 +1,40 @@
 <!doctype html>
 <html lang="en">
-  <head>
+<head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ChessOnline</title>
-  </head>
-  <body>
+</head>
+<body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
-  </body>
+
+    <!-- FLOATING WRAPPER TO FORCE VISIBILITY -->
+    <div style="position: fixed; bottom: 10px; right: 10px; z-index: 9999; background: white; padding: 2px; border-radius: 4px;">
+
+        <!-- Default Statcounter code for ChessOnLine https://chessonline.eu.com/ -->
+        <script type="text/javascript">
+            var sc_project = 13226192;
+            var sc_invisible = 0;
+            var sc_security = "7620af54";
+            var scJsHost = "https://";
+            document.write("<sc" + "ript type='text/javascript' src='" + scJsHost +
+                "statcounter.com/counter/counter.js'></" + "script>");
+        </script>
+        <noscript>
+            <div class="statcounter">
+                <a title="free web stats"
+                   href="https://statcounter.com/" target="_blank">
+                    <img class="statcounter"
+                         src="https://c.statcounter.com/13226192/0/7620af54/0/" alt="free web stats"
+                         referrerPolicy="no-referrer-when-downgrade">
+                </a>
+            </div>
+        </noscript>
+        <!-- End of Statcounter Code -->
+
+    </div>
+
+</body>
 </html>
