@@ -150,9 +150,9 @@ function ChessGame({ user, onLogout }) {
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [moveFrom, setMoveFrom] = useState('');
 
-    // ✨ ADDED: Status & Playing Computer State
     const [status, setStatus] = useState("Waiting to start...");
     const [isPlayingComputer, setIsPlayingComputer] = useState(false);
+    const [challengeTime, setChallengeTime] = useState(600); // ✨ ADDED: Default 10 mins (600s)
 
     const [explosionSquare, setExplosionSquare] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState([]);
@@ -171,7 +171,6 @@ function ChessGame({ user, onLogout }) {
     const [opponent, setOpponent] = useState(null);
     const [playerColor, setPlayerColor] = useState('w');
 
-    // ✨ ADDED: 5 Minute Timers (300 seconds)
     const [whiteTime, setWhiteTime] = useState(300);
     const [blackTime, setBlackTime] = useState(300);
 
@@ -293,13 +292,13 @@ function ChessGame({ user, onLogout }) {
         setStats(updates);
     };
 
-    const resetMatch = () => {
+    // ✨ UPDATED: Accept dynamic timeControl
+    const resetMatch = (timeControl = 300) => {
         gameRef.current = new Chess();
         setMoveHistory([]);
         setCurrentMoveIndex(0);
-        // ✨ ADDED: Ensure timers reset to 5 minutes
-        setWhiteTime(300);
-        setBlackTime(300);
+        setWhiteTime(timeControl);
+        setBlackTime(timeControl);
         setMoveFrom('');
         setIsGameOverManually(false);
         setIncomingDrawOffer(false);
@@ -319,14 +318,15 @@ function ChessGame({ user, onLogout }) {
                 setOnlineUsers(activePresences);
             })
             .on('broadcast', { event: 'challenge' }, ({ payload }) => {
-                if (payload.targetEmail === userEmail) setIncomingChallenge(payload.challengerEmail);
+                // ✨ UPDATED: Store object with email and time
+                if (payload.targetEmail === userEmail) setIncomingChallenge({ email: payload.challengerEmail, timeControl: payload.timeControl });
             })
             .on('broadcast', { event: 'accept' }, ({ payload }) => {
                 if (payload.challengerEmail === userEmail) {
                     setOpponent(payload.targetEmail);
-                    setIsPlayingComputer(false); // ✨ ADDED
+                    setIsPlayingComputer(false);
                     setPlayerColor('w');
-                    resetMatch();
+                    resetMatch(payload.timeControl); // ✨ UPDATED: Reset match with accepted time
                 }
             })
             .on('broadcast', { event: 'declineChallenge' }, ({ payload }) => {
@@ -356,7 +356,7 @@ function ChessGame({ user, onLogout }) {
                     setIsGameOverManually(true);
                     const msg = "Opponent resigned. You Win!";
                     setStatus(msg);
-                    speak(msg); // 🟢 SPEAK
+                    speak(msg);
                     recordResult('win');
                 }
             })
@@ -367,7 +367,7 @@ function ChessGame({ user, onLogout }) {
                 if (payload.targetEmail === userEmail) {
                     setIsGameOverManually(true);
                     setStatus("Draw Accepted!");
-                    speak("The game is a draw"); // 🟢 SPEAK
+                    speak("The game is a draw");
                     recordResult('draw');
                 }
             })
@@ -383,7 +383,6 @@ function ChessGame({ user, onLogout }) {
 
     // --- Timer Logic ---
     useEffect(() => {
-        // ✨ ADDED: Block timer tick if idle in lobby
         if (displayGame.isGameOver() || isGameOverManually || currentMoveIndex < moveHistory.length || (!opponent && !isPlayingComputer)) {
             clearInterval(timerRef.current);
             return;
@@ -403,7 +402,7 @@ function ChessGame({ user, onLogout }) {
             const outcome = playerColor === winnerColor ? "You Win!" : "You Lose!";
             const msg = `Time Out! ${outcome}`;
             setStatus(msg);
-            speak(msg); // 🟢 SPEAK
+            speak(msg);
             recordResult(playerColor === winnerColor ? 'win' : 'loss');
         }
     }, [whiteTime, blackTime, isGameOverManually, playerColor]);
@@ -417,7 +416,7 @@ function ChessGame({ user, onLogout }) {
             setStatus(msg);
             if (!isGameOverManually) {
                 setIsGameOverManually(true);
-                speak(msg); // 🟢 SPEAK
+                speak(msg);
                 recordResult(playerColor === loserColor ? 'loss' : 'win');
             }
         } else if (displayGame.isDraw()) {
@@ -425,7 +424,7 @@ function ChessGame({ user, onLogout }) {
             setStatus(msg);
             if (!isGameOverManually) {
                 setIsGameOverManually(true);
-                speak(msg); // 🟢 SPEAK
+                speak(msg);
                 recordResult('draw');
             }
         } else if (!isGameOverManually && (opponent || isPlayingComputer)) {
@@ -445,22 +444,25 @@ function ChessGame({ user, onLogout }) {
     const handleSendChallenge = async (targetEmail) => {
         if (!lobbyChannel) return;
         setStatus(`Challenge sent...`);
-        await lobbyChannel.send({ type: 'broadcast', event: 'challenge', payload: { challengerEmail: userEmail, targetEmail } });
+        // ✨ UPDATED: Pass the time control payload
+        await lobbyChannel.send({ type: 'broadcast', event: 'challenge', payload: { challengerEmail: userEmail, targetEmail, timeControl: challengeTime } });
     };
 
     const handleAcceptChallenge = async () => {
         if (!lobbyChannel || !incomingChallenge) return;
-        await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge, targetEmail: userEmail } });
-        setOpponent(incomingChallenge);
-        setIsPlayingComputer(false); // ✨ ADDED
+        // ✨ UPDATED: Send timeControl back so both clients sync
+        await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge.email, targetEmail: userEmail, timeControl: incomingChallenge.timeControl } });
+        setOpponent(incomingChallenge.email);
+        setIsPlayingComputer(false);
         setPlayerColor('b');
+        resetMatch(incomingChallenge.timeControl); // ✨ UPDATED: Use proposed time
         setIncomingChallenge(null);
-        resetMatch();
     };
 
     const handleDeclineChallenge = () => {
         if (lobbyChannel && incomingChallenge) {
-            lobbyChannel.send({ type: 'broadcast', event: 'declineChallenge', payload: { targetEmail: incomingChallenge, declinerEmail: userEmail } });
+            // ✨ UPDATED: Read from object .email
+            lobbyChannel.send({ type: 'broadcast', event: 'declineChallenge', payload: { targetEmail: incomingChallenge.email, declinerEmail: userEmail } });
         }
         setIncomingChallenge(null);
     };
@@ -471,7 +473,7 @@ function ChessGame({ user, onLogout }) {
             setIsGameOverManually(true);
             const msg = "You resigned. You Lose!";
             setStatus(msg);
-            speak(msg); // 🟢 SPEAK
+            speak(msg);
             recordResult('loss');
             lobbyChannel.send({ type: 'broadcast', event: 'resign', payload: { targetEmail: opponentRef.current } });
         }
@@ -488,7 +490,7 @@ function ChessGame({ user, onLogout }) {
         setIsGameOverManually(true);
         const msg = "Draw agreed!";
         setStatus(msg);
-        speak(msg); // 🟢 SPEAK
+        speak(msg);
         recordResult('draw');
         setIncomingDrawOffer(false);
         if (opponent) lobbyChannel.send({ type: 'broadcast', event: 'drawAccepted', payload: { targetEmail: opponentRef.current } });
@@ -496,7 +498,7 @@ function ChessGame({ user, onLogout }) {
 
     function onSquareClick(square) {
         if (displayGame.isGameOver() || isGameOverManually) return;
-        if (!opponent && !isPlayingComputer) return; // ✨ ADDED: Block clicks in idle lobby
+        if (!opponent && !isPlayingComputer) return;
         if (currentMoveIndex < moveHistory.length) { setCurrentMoveIndex(moveHistory.length); return; }
         if (opponent && displayGame.turn() !== playerColor) return;
         if (!opponent && displayGame.turn() === 'b') return;
@@ -524,7 +526,6 @@ function ChessGame({ user, onLogout }) {
 
     // AI Logic
     useEffect(() => {
-        // ✨ ADDED: Check !isPlayingComputer to prevent AI calculation in lobby
         if (!isPlayingComputer || displayGame.isGameOver() || isGameOverManually || opponent || currentMoveIndex < moveHistory.length) return;
         if (displayGame.turn() === 'b') {
             const timer = setTimeout(() => {
@@ -541,7 +542,13 @@ function ChessGame({ user, onLogout }) {
         }
     }, [moveHistory, currentMoveIndex, opponent, isGameOverManually, isPlayingComputer]);
 
-    const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+    // ✨ UPDATED: Robust formatTime for longer durations (Days, Hours)
+    const formatTime = (s) => {
+        if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
+        if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+        return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
+    };
+
     const formattedHistory = [];
     for (let i = 0; i < moveHistory.length; i += 2) { formattedHistory.push({ turn: Math.floor(i / 2) + 1, w: moveHistory[i], b: moveHistory[i + 1] || '' }); }
 
@@ -583,7 +590,8 @@ function ChessGame({ user, onLogout }) {
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '560px' }}>
                     {incomingChallenge && (
                         <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <span>⚔️ {incomingChallenge.split('@')[0]} challenged you!</span>
+                            {/* ✨ UPDATED: Display time block and read email from object */}
+                            <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)})</span>
                             <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
                             <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
                         </div>
@@ -627,10 +635,22 @@ function ChessGame({ user, onLogout }) {
                         </div>
 
                         <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                            {/* ✨ ADDED: Time Control Selector before online users */}
+                            {viewMode === 'online' && (
+                                <div style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between' }}>
+                                    <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>CHALLENGE TIME:</span>
+                                    <select value={challengeTime} onChange={(e) => setChallengeTime(Number(e.target.value))} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: 'pointer' }}>
+                                        <option value={600}>10 Mins</option>
+                                        <option value={86400}>1 Day</option>
+                                        <option value={259200}>3 Days</option>
+                                    </select>
+                                </div>
+                            )}
+
                             {viewMode === 'online' && onlineUsers.map((u, i) => (
                                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
                                     <span>{u.email.split('@')[0]}</span>
-                                    {u.email !== userEmail && <button onClick={() => handleSendChallenge(u.email)} style={{ fontSize: '9px', cursor: 'pointer' }}>Challenge</button>}
+                                    {u.email !== userEmail && <button onClick={() => handleSendChallenge(u.email)} style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#38bdf8', color: '#000', border: 'none', borderRadius: '3px', padding: '2px 5px' }}>Challenge</button>}
                                 </div>
                             ))}
                             {viewMode === 'all' && allMembers.map((u, i) => (
@@ -682,8 +702,8 @@ function ChessGame({ user, onLogout }) {
                         <button onClick={handleResign} disabled={!opponent || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer' }}>🏳️ Resign</button>
                     </div>
 
-                    {/* ✨ ADDED: setIsPlayingComputer(true) below */}
-                    <button onClick={() => { setOpponent(null); setIsPlayingComputer(true); resetMatch(); setStatus("Playing Computer"); }} style={{ width: '100%', padding: '10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Play Computer</button>
+                    {/* ✨ UPDATED: Pass 300 to resetMatch for computer games default */}
+                    <button onClick={() => { setOpponent(null); setIsPlayingComputer(true); resetMatch(300); setStatus("Playing Computer"); }} style={{ width: '100%', padding: '10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Play Computer</button>
 
                     <button
                         onClick={() => setGunshotEnabled(!gunshotEnabled)}
@@ -712,7 +732,6 @@ function ChessGame({ user, onLogout }) {
                     </div>
                 </aside>
 
-
                 {/* 3. RIGHT: 50 TRAVEL ADS COLUMN */}
                 <div style={{ minWidth: '320px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)' }}>
                     <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '14px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', zIndex: 10 }}>
@@ -733,7 +752,6 @@ function ChessGame({ user, onLogout }) {
 
             </div>
 
-            {/* ✨ ADDED: FOOTER COMPONENT */}
             <footer style={{ textAlign: 'center', padding: '15px', color: '#888', fontSize: '14px', borderTop: '1px solid #333', backgroundColor: '#1e1e1e', marginTop: 'auto' }}>
                 NoirSoft Creation {new Date().getFullYear()}
             </footer>
