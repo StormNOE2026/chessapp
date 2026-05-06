@@ -152,7 +152,7 @@ function ChessGame({ user, onLogout }) {
 
     const [status, setStatus] = useState("Waiting to start...");
     const [isPlayingComputer, setIsPlayingComputer] = useState(false);
-    const [challengeTime, setChallengeTime] = useState(600); // ✨ ADDED: Default 10 mins (600s)
+    const [challengeTime, setChallengeTime] = useState(600);
 
     const [explosionSquare, setExplosionSquare] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState([]);
@@ -181,7 +181,6 @@ function ChessGame({ user, onLogout }) {
     const [gunshotEnabled, setGunshotEnabled] = useState(true);
     const gunshotEnabledRef = useRef(gunshotEnabled);
 
-    // Sync the ref with the state so socket events always have the freshest value
     useEffect(() => {
         gunshotEnabledRef.current = gunshotEnabled;
     }, [gunshotEnabled]);
@@ -209,7 +208,6 @@ function ChessGame({ user, onLogout }) {
     const displayGame = new Chess();
     moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { } });
 
-    // COMBINED INITIAL FETCH
     useEffect(() => {
         fetchUserStats();
         fetchAllMembers();
@@ -229,7 +227,6 @@ function ChessGame({ user, onLogout }) {
         if (data) setAllMembers(data);
     };
 
-    // FETCH LICHESS TV GAMES
     const fetchTvGames = async () => {
         try {
             const res = await fetch('https://lichess.org/api/tv/channels');
@@ -251,14 +248,12 @@ function ChessGame({ user, onLogout }) {
         }
     };
 
-    // FETCH CHESS.COM TV
     const fetchChessComTv = async () => {
         try {
             const res = await fetch('https://api.chess.com/pub/streamers');
             if (!res.ok) throw new Error("Network response was not ok");
             const data = await res.json();
 
-            // Filter to only include streamers who are currently live
             const liveStreamers = data.streamers.filter(s => s.is_live);
             setChessComStreamers(liveStreamers);
         } catch (e) {
@@ -266,9 +261,13 @@ function ChessGame({ user, onLogout }) {
         }
     };
 
+    // ✨ UPDATED: Added speech for "Check"
     const playMoveSound = (move, gameInstance) => {
         let audioUrl = sounds.move;
-        if (gameInstance.inCheck()) audioUrl = sounds.check;
+        if (gameInstance.inCheck()) {
+            audioUrl = sounds.check;
+            speak("Check");
+        }
         else if (move.captured) audioUrl = sounds.capture;
         new Audio(audioUrl).play().catch(() => { });
     };
@@ -292,7 +291,6 @@ function ChessGame({ user, onLogout }) {
         setStats(updates);
     };
 
-    // ✨ UPDATED: Accept dynamic timeControl
     const resetMatch = (timeControl = 300) => {
         gameRef.current = new Chess();
         setMoveHistory([]);
@@ -318,7 +316,6 @@ function ChessGame({ user, onLogout }) {
                 setOnlineUsers(activePresences);
             })
             .on('broadcast', { event: 'challenge' }, ({ payload }) => {
-                // ✨ UPDATED: Store object with email and time
                 if (payload.targetEmail === userEmail) setIncomingChallenge({ email: payload.challengerEmail, timeControl: payload.timeControl });
             })
             .on('broadcast', { event: 'accept' }, ({ payload }) => {
@@ -326,7 +323,10 @@ function ChessGame({ user, onLogout }) {
                     setOpponent(payload.targetEmail);
                     setIsPlayingComputer(false);
                     setPlayerColor('w');
-                    resetMatch(payload.timeControl); // ✨ UPDATED: Reset match with accepted time
+                    resetMatch(payload.timeControl);
+
+                    setStatus("Game started");
+                    speak("Game started");
                 }
             })
             .on('broadcast', { event: 'declineChallenge' }, ({ payload }) => {
@@ -407,7 +407,7 @@ function ChessGame({ user, onLogout }) {
         }
     }, [whiteTime, blackTime, isGameOverManually, playerColor]);
 
-    // Check for Checkmate/Draw
+    // ✨ UPDATED: Check for Checkmate/Draw and speak "Your move"
     useEffect(() => {
         if (displayGame.isCheckmate()) {
             const loserColor = displayGame.turn();
@@ -428,9 +428,18 @@ function ChessGame({ user, onLogout }) {
                 recordResult('draw');
             }
         } else if (!isGameOverManually && (opponent || isPlayingComputer)) {
-            setStatus(displayGame.turn() === playerColor ? "🟢 Your turn" : "🔴 Waiting...");
+            const isMyTurn = displayGame.turn() === playerColor;
+            const newStatus = isMyTurn ? "🟢 Your turn" : "🔴 Waiting...";
+
+            // Only update and speak if moves have happened, so we don't overwrite "Game started"
+            if (moveHistory.length > 0 && status !== newStatus) {
+                setStatus(newStatus);
+                if (isMyTurn) {
+                    speak("Your move");
+                }
+            }
         }
-    }, [moveHistory, playerColor, isGameOverManually, opponent, isPlayingComputer]);
+    }, [moveHistory, playerColor, isGameOverManually, opponent, isPlayingComputer, status]);
 
     // --- ACTIONS ---
     const sendChatMessage = async (e) => {
@@ -444,24 +453,25 @@ function ChessGame({ user, onLogout }) {
     const handleSendChallenge = async (targetEmail) => {
         if (!lobbyChannel) return;
         setStatus(`Challenge sent...`);
-        // ✨ UPDATED: Pass the time control payload
         await lobbyChannel.send({ type: 'broadcast', event: 'challenge', payload: { challengerEmail: userEmail, targetEmail, timeControl: challengeTime } });
     };
 
     const handleAcceptChallenge = async () => {
         if (!lobbyChannel || !incomingChallenge) return;
-        // ✨ UPDATED: Send timeControl back so both clients sync
         await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge.email, targetEmail: userEmail, timeControl: incomingChallenge.timeControl } });
         setOpponent(incomingChallenge.email);
         setIsPlayingComputer(false);
         setPlayerColor('b');
-        resetMatch(incomingChallenge.timeControl); // ✨ UPDATED: Use proposed time
+        resetMatch(incomingChallenge.timeControl);
+
+        setStatus("Game started");
+        speak("Game started");
+
         setIncomingChallenge(null);
     };
 
     const handleDeclineChallenge = () => {
         if (lobbyChannel && incomingChallenge) {
-            // ✨ UPDATED: Read from object .email
             lobbyChannel.send({ type: 'broadcast', event: 'declineChallenge', payload: { targetEmail: incomingChallenge.email, declinerEmail: userEmail } });
         }
         setIncomingChallenge(null);
@@ -542,7 +552,6 @@ function ChessGame({ user, onLogout }) {
         }
     }, [moveHistory, currentMoveIndex, opponent, isGameOverManually, isPlayingComputer]);
 
-    // ✨ UPDATED: Robust formatTime for longer durations (Days, Hours)
     const formatTime = (s) => {
         if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
         if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
@@ -590,7 +599,6 @@ function ChessGame({ user, onLogout }) {
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '560px' }}>
                     {incomingChallenge && (
                         <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {/* ✨ UPDATED: Display time block and read email from object */}
                             <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)})</span>
                             <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
                             <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
@@ -635,7 +643,6 @@ function ChessGame({ user, onLogout }) {
                         </div>
 
                         <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                            {/* ✨ ADDED: Time Control Selector before online users */}
                             {viewMode === 'online' && (
                                 <div style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between' }}>
                                     <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>CHALLENGE TIME:</span>
@@ -702,8 +709,13 @@ function ChessGame({ user, onLogout }) {
                         <button onClick={handleResign} disabled={!opponent || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer' }}>🏳️ Resign</button>
                     </div>
 
-                    {/* ✨ UPDATED: Pass 300 to resetMatch for computer games default */}
-                    <button onClick={() => { setOpponent(null); setIsPlayingComputer(true); resetMatch(300); setStatus("Playing Computer"); }} style={{ width: '100%', padding: '10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Play Computer</button>
+                    <button onClick={() => {
+                        setOpponent(null);
+                        setIsPlayingComputer(true);
+                        resetMatch(300);
+                        setStatus("Game started");
+                        speak("Game started");
+                    }} style={{ width: '100%', padding: '10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Play Computer</button>
 
                     <button
                         onClick={() => setGunshotEnabled(!gunshotEnabled)}
