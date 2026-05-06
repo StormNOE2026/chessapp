@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { supabase } from './supabaseClient';
 import './App.css';
@@ -105,25 +105,6 @@ function getBestMove(gameInstance, depth = 2) {
 }
 
 // ==========================================
-// 📐 RESPONSIVE BOARD SIZE HOOK
-// ==========================================
-function useBoardSize() {
-    const getSize = () => {
-        const w = window.innerWidth;
-        if (w < 480) return Math.max(w - 16, 280);
-        if (w < 768) return Math.min(w - 32, 480);
-        return 560;
-    };
-    const [size, setSize] = React.useState(getSize);
-    React.useEffect(() => {
-        const fn = () => setSize(getSize());
-        window.addEventListener('resize', fn);
-        return () => window.removeEventListener('resize', fn);
-    }, []);
-    return size;
-}
-
-// ==========================================
 // 🔐 AUTH SCREEN
 // ==========================================
 function AuthScreen({ onAuthSuccess }) {
@@ -131,46 +112,30 @@ function AuthScreen({ onAuthSuccess }) {
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(false);
     const [loading, setLoading] = useState(false);
-    const [authError, setAuthError] = useState('');
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-        setAuthError('');
         let { data, error } = isLogin
             ? await supabase.auth.signInWithPassword({ email, password })
             : await supabase.auth.signUp({ email, password });
         setLoading(false);
-        if (error) setAuthError(error.message);
+        if (error) alert(error.message);
         else if (data?.user) onAuthSuccess(data.user);
     };
 
     return (
-        <div className="auth-screen">
-            <div className="auth-box">
-                <div className="auth-logo">♟️</div>
-                <h2 className="auth-title">{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
-                {authError && <div className="auth-error">{authError}</div>}
-                
-                <form onSubmit={handleSubmit} className="auth-form">
-                    <input 
-                        type="email" required placeholder="Email address" 
-                        value={email} onChange={(e) => setEmail(e.target.value)} 
-                        className="auth-input" 
-                    />
-                    <input 
-                        type="password" required placeholder="Password" 
-                        value={password} onChange={(e) => setPassword(e.target.value)} 
-                        className="auth-input" 
-                    />
-                    <button disabled={loading} type="submit" className="auth-btn">
-                        {loading ? 'Processing...' : (isLogin ? 'Log In' : 'Sign Up')}
-                    </button>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI' }}>
+            <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '320px', border: '1px solid #333' }}>
+                <h2 style={{ textAlign: 'center', color: '#38bdf8' }}>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>{loading ? '...' : (isLogin ? 'Log In' : 'Sign Up')}</button>
                 </form>
-                
-                <button type="button" onClick={() => setIsLogin(!isLogin)} className="auth-toggle">
-                    {isLogin ? 'Need an account? Sign up' : 'Have an account? Log in'}
-                </button>
+                <div style={{ textAlign: 'center', marginTop: '20px', color: '#aaa', fontSize: '14px' }}>
+                    <span onClick={() => setIsLogin(!isLogin)} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>{isLogin ? 'Need an account? Sign up' : 'Have an account? Log in'}</span>
+                </div>
             </div>
         </div>
     );
@@ -181,19 +146,19 @@ function AuthScreen({ onAuthSuccess }) {
 // ==========================================
 function ChessGame({ user, onLogout }) {
     const userEmail = user.email;
-    const boardSize = useBoardSize();
-    const squareSize = Math.floor(boardSize / 8);
-    const [mobileTab, setMobileTab] = useState('board');
     const [moveHistory, setMoveHistory] = useState([]);
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [moveFrom, setMoveFrom] = useState('');
-    const [status, setStatus] = useState("White to move");
+
+    // ✨ ADDED: Status & Playing Computer State
+    const [status, setStatus] = useState("Waiting to start...");
+    const [isPlayingComputer, setIsPlayingComputer] = useState(false);
+
     const [explosionSquare, setExplosionSquare] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState([]);
     const [allMembers, setAllMembers] = useState([]);
     const [tvGames, setTvGames] = useState([]);
 
-    // ✨ ADDED: State to hold Chess.com live streamers
     const [chessComStreamers, setChessComStreamers] = useState([]);
 
     const [viewMode, setViewMode] = useState('online');
@@ -205,18 +170,27 @@ function ChessGame({ user, onLogout }) {
     const chatEndRef = useRef(null);
     const [opponent, setOpponent] = useState(null);
     const [playerColor, setPlayerColor] = useState('w');
-    const [whiteTime, setWhiteTime] = useState(60);
-    const [blackTime, setBlackTime] = useState(60);
+
+    // ✨ ADDED: 5 Minute Timers (300 seconds)
+    const [whiteTime, setWhiteTime] = useState(300);
+    const [blackTime, setBlackTime] = useState(300);
+
     const timerRef = useRef(null);
     const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0 });
     const [isGameOverManually, setIsGameOverManually] = useState(false);
 
+    const [gunshotEnabled, setGunshotEnabled] = useState(true);
+    const gunshotEnabledRef = useRef(gunshotEnabled);
+
+    // Sync the ref with the state so socket events always have the freshest value
+    useEffect(() => {
+        gunshotEnabledRef.current = gunshotEnabled;
+    }, [gunshotEnabled]);
+
     const opponentRef = useRef(null);
     const gameRef = useRef(new Chess());
-    const lobbyChannelRef = useRef(null);
 
     useEffect(() => { opponentRef.current = opponent; }, [opponent]);
-    useEffect(() => { lobbyChannelRef.current = lobbyChannel; }, [lobbyChannel]);
 
     const pieceImages = {
         p: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg',
@@ -241,7 +215,7 @@ function ChessGame({ user, onLogout }) {
         fetchUserStats();
         fetchAllMembers();
         fetchTvGames();
-        fetchChessComTv(); // ✨ ADDED: Fetch Chess.com live streamers on load
+        fetchChessComTv();
     }, []);
 
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
@@ -278,7 +252,7 @@ function ChessGame({ user, onLogout }) {
         }
     };
 
-    // ✨ ADDED: Fetch Live Streamers from Chess.com
+    // FETCH CHESS.COM TV
     const fetchChessComTv = async () => {
         try {
             const res = await fetch('https://api.chess.com/pub/streamers');
@@ -301,7 +275,9 @@ function ChessGame({ user, onLogout }) {
     };
 
     const triggerCaptureEffects = (square) => {
-        new Audio('/shotgun.mp3').play().catch(() => { });
+        if (gunshotEnabledRef.current) {
+            new Audio('/shotgun.mp3').play().catch(() => { });
+        }
         setExplosionSquare(square);
         setTimeout(() => setExplosionSquare(null), 600);
     };
@@ -319,7 +295,15 @@ function ChessGame({ user, onLogout }) {
 
     const resetMatch = () => {
         gameRef.current = new Chess();
-        setMoveHistory([]); setCurrentMoveIndex(0); setWhiteTime(60); setBlackTime(60); setMoveFrom(''); setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
+        setMoveHistory([]);
+        setCurrentMoveIndex(0);
+        // ✨ ADDED: Ensure timers reset to 5 minutes
+        setWhiteTime(300);
+        setBlackTime(300);
+        setMoveFrom('');
+        setIsGameOverManually(false);
+        setIncomingDrawOffer(false);
+        setChatMessages([]);
     };
 
     // --- 🌐 REALTIME BROADCAST HANDLER ---
@@ -340,6 +324,7 @@ function ChessGame({ user, onLogout }) {
             .on('broadcast', { event: 'accept' }, ({ payload }) => {
                 if (payload.challengerEmail === userEmail) {
                     setOpponent(payload.targetEmail);
+                    setIsPlayingComputer(false); // ✨ ADDED
                     setPlayerColor('w');
                     resetMatch();
                 }
@@ -368,42 +353,38 @@ function ChessGame({ user, onLogout }) {
             })
             .on('broadcast', { event: 'resign' }, ({ payload }) => {
                 if (payload.targetEmail === userEmail && !isGameOverManually) {
-                    setTimeout(() => {
-                        setIsGameOverManually(true);
-                        const msg = "Opponent resigned. You Win!";
-                        setStatus(msg);
-                        speak(msg); // 🟢 SPEAK
-                        recordResult('win');
-                    }, 0);
+                    setIsGameOverManually(true);
+                    const msg = "Opponent resigned. You Win!";
+                    setStatus(msg);
+                    speak(msg); // 🟢 SPEAK
+                    recordResult('win');
                 }
             })
             .on('broadcast', { event: 'drawOffer' }, ({ payload }) => {
-                if (payload.targetEmail === userEmail) setTimeout(() => setIncomingDrawOffer(true), 0);
+                if (payload.targetEmail === userEmail) setIncomingDrawOffer(true);
             })
             .on('broadcast', { event: 'drawAccepted' }, ({ payload }) => {
                 if (payload.targetEmail === userEmail) {
-                    setTimeout(() => {
-                        setIsGameOverManually(true);
-                        setStatus("Draw Accepted!");
-                        speak("The game is a draw"); // 🟢 SPEAK
-                        recordResult('draw');
-                    }, 0);
+                    setIsGameOverManually(true);
+                    setStatus("Draw Accepted!");
+                    speak("The game is a draw"); // 🟢 SPEAK
+                    recordResult('draw');
                 }
             })
             .on('broadcast', { event: 'drawDeclined' }, ({ payload }) => {
-                if (payload.targetEmail === userEmail) { setTimeout(() => { setStatus("Draw offer declined."); setIncomingDrawOffer(false); }, 0); }
+                if (payload.targetEmail === userEmail) { setStatus("Draw offer declined."); setIncomingDrawOffer(false); }
             })
             .subscribe(async (s) => {
                 if (s === 'SUBSCRIBED') await channel.track({ email: userEmail, socketId: Math.random().toString(36).substring(7) });
             });
 
         return () => { supabase.removeChannel(channel); };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [userEmail, isGameOverManually]);
 
     // --- Timer Logic ---
     useEffect(() => {
-        if (displayGame.isGameOver() || isGameOverManually || currentMoveIndex < moveHistory.length) {
+        // ✨ ADDED: Block timer tick if idle in lobby
+        if (displayGame.isGameOver() || isGameOverManually || currentMoveIndex < moveHistory.length || (!opponent && !isPlayingComputer)) {
             clearInterval(timerRef.current);
             return;
         }
@@ -412,56 +393,45 @@ function ChessGame({ user, onLogout }) {
             else setBlackTime(t => Math.max(0, t - 1));
         }, 1000);
         return () => clearInterval(timerRef.current);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [moveHistory, currentMoveIndex, isGameOverManually]);
+    }, [moveHistory, currentMoveIndex, isGameOverManually, opponent, isPlayingComputer]);
 
     // Check for Timeout
     useEffect(() => {
         if (!isGameOverManually && (whiteTime === 0 || blackTime === 0)) {
-            setTimeout(() => {
-                setIsGameOverManually(true);
-                const winnerColor = whiteTime === 0 ? "b" : "w";
-                const outcome = playerColor === winnerColor ? "You Win!" : "You Lose!";
-                const msg = `Time Out! ${outcome}`;
-                setStatus(msg);
-                speak(msg); // 🟢 SPEAK
-                recordResult(playerColor === winnerColor ? 'win' : 'loss');
-            }, 0);
+            setIsGameOverManually(true);
+            const winnerColor = whiteTime === 0 ? "b" : "w";
+            const outcome = playerColor === winnerColor ? "You Win!" : "You Lose!";
+            const msg = `Time Out! ${outcome}`;
+            setStatus(msg);
+            speak(msg); // 🟢 SPEAK
+            recordResult(playerColor === winnerColor ? 'win' : 'loss');
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [whiteTime, blackTime, isGameOverManually, playerColor]);
 
     // Check for Checkmate/Draw
     useEffect(() => {
         if (displayGame.isCheckmate()) {
-            setTimeout(() => {
-                const loserColor = displayGame.turn();
-                const outcome = playerColor === loserColor ? "You Lose!" : "You Win!";
-                const msg = `Checkmate! ${outcome}`;
-                setStatus(msg);
-                if (!isGameOverManually) {
-                    setIsGameOverManually(true);
-                    speak(msg); // 🟢 SPEAK
-                    recordResult(playerColor === loserColor ? 'loss' : 'win');
-                }
-            }, 0);
+            const loserColor = displayGame.turn();
+            const outcome = playerColor === loserColor ? "You Lose!" : "You Win!";
+            const msg = `Checkmate! ${outcome}`;
+            setStatus(msg);
+            if (!isGameOverManually) {
+                setIsGameOverManually(true);
+                speak(msg); // 🟢 SPEAK
+                recordResult(playerColor === loserColor ? 'loss' : 'win');
+            }
         } else if (displayGame.isDraw()) {
-            setTimeout(() => {
-                const msg = "The game is a Draw!";
-                setStatus(msg);
-                if (!isGameOverManually) {
-                    setIsGameOverManually(true);
-                    speak(msg); // 🟢 SPEAK
-                    recordResult('draw');
-                }
-            }, 0);
-        } else if (!isGameOverManually) {
-            setTimeout(() => {
-                setStatus(displayGame.turn() === playerColor ? "🟢 Your turn" : "🔴 Waiting...");
-            }, 0);
+            const msg = "The game is a Draw!";
+            setStatus(msg);
+            if (!isGameOverManually) {
+                setIsGameOverManually(true);
+                speak(msg); // 🟢 SPEAK
+                recordResult('draw');
+            }
+        } else if (!isGameOverManually && (opponent || isPlayingComputer)) {
+            setStatus(displayGame.turn() === playerColor ? "🟢 Your turn" : "🔴 Waiting...");
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [moveHistory, playerColor, isGameOverManually]);
+    }, [moveHistory, playerColor, isGameOverManually, opponent, isPlayingComputer]);
 
     // --- ACTIONS ---
     const sendChatMessage = async (e) => {
@@ -482,6 +452,7 @@ function ChessGame({ user, onLogout }) {
         if (!lobbyChannel || !incomingChallenge) return;
         await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge, targetEmail: userEmail } });
         setOpponent(incomingChallenge);
+        setIsPlayingComputer(false); // ✨ ADDED
         setPlayerColor('b');
         setIncomingChallenge(null);
         resetMatch();
@@ -525,6 +496,7 @@ function ChessGame({ user, onLogout }) {
 
     function onSquareClick(square) {
         if (displayGame.isGameOver() || isGameOverManually) return;
+        if (!opponent && !isPlayingComputer) return; // ✨ ADDED: Block clicks in idle lobby
         if (currentMoveIndex < moveHistory.length) { setCurrentMoveIndex(moveHistory.length); return; }
         if (opponent && displayGame.turn() !== playerColor) return;
         if (!opponent && displayGame.turn() === 'b') return;
@@ -547,12 +519,13 @@ function ChessGame({ user, onLogout }) {
             } else {
                 if (piece?.color === displayGame.turn()) setMoveFrom(square); else setMoveFrom('');
             }
-        } catch { setMoveFrom(''); }
+        } catch (e) { setMoveFrom(''); }
     }
 
     // AI Logic
     useEffect(() => {
-        if (displayGame.isGameOver() || isGameOverManually || opponent || currentMoveIndex < moveHistory.length) return;
+        // ✨ ADDED: Check !isPlayingComputer to prevent AI calculation in lobby
+        if (!isPlayingComputer || displayGame.isGameOver() || isGameOverManually || opponent || currentMoveIndex < moveHistory.length) return;
         if (displayGame.turn() === 'b') {
             const timer = setTimeout(() => {
                 const bestMove = getBestMove(gameRef.current, 2);
@@ -566,14 +539,13 @@ function ChessGame({ user, onLogout }) {
             }, 600);
             return () => clearTimeout(timer);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [moveHistory, currentMoveIndex, opponent, isGameOverManually]);
+    }, [moveHistory, currentMoveIndex, opponent, isGameOverManually, isPlayingComputer]);
 
     const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
     const formattedHistory = [];
     for (let i = 0; i < moveHistory.length; i += 2) { formattedHistory.push({ turn: Math.floor(i / 2) + 1, w: moveHistory[i], b: moveHistory[i + 1] || '' }); }
 
-    const boardItems = [];
+    const board = [];
     const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
     const rowOrder = playerColor === 'w' ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
     const colOrder = playerColor === 'w' ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
@@ -582,197 +554,190 @@ function ChessGame({ user, onLogout }) {
         colOrder.forEach((col) => {
             const square = `${files[col]}${row + 1}`;
             const piece = displayGame.get(square);
-            boardItems.push({ key: square, piece });
+            const isSelected = moveFrom === square;
+            board.push(
+                <div key={square} onClick={() => onSquareClick(square)} style={{ position: 'relative', width: '70px', height: '70px', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? '#f6f669' : ((row + col) % 2 === 0 ? '#5c7fb8' : '#ffffff') }}>
+                    {piece && <img src={pieceImages[piece.color === 'w' ? piece.type.toUpperCase() : piece.type.toLowerCase()]} alt="" style={{ width: '90%', pointerEvents: 'none' }} />}
+                    {explosionSquare === square && <div className="star-wars-blast"></div>}
+                </div>
+            );
         });
     });
 
     return (
-        <div className="app-root">
-            <header className="app-header">
-                <h1 className="app-header-logo">♟️ ChessApp</h1>
-                <div className="app-header-user">
-                    <span className="app-header-email-label">Logged in:</span>
-                    <span className="app-header-email">{userEmail}</span>
-                    <button onClick={onLogout} className="logout-btn">Logout</button>
+        <div style={{ backgroundColor: '#121212', color: 'white', minHeight: '100vh', display: 'flex', flexDirection: 'column', fontFamily: 'Segoe UI', overflowX: 'hidden' }}>
+            <header style={{ height: '60px', backgroundColor: '#1e1e1e', borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                    <h2 style={{ color: '#38bdf8', margin: 0, fontSize: '20px' }}>ChessOnline</h2>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <span style={{ fontSize: '14px' }}>Logged in: <b style={{ color: '#38bdf8' }}>{userEmail}</b></span>
+                    <button onClick={onLogout} style={{ fontSize: '12px', padding: '5px 10px', cursor: 'pointer' }}>Logout</button>
                 </div>
             </header>
 
-            <div className="notification-bar">
-                {incomingChallenge && (
-                    <div className="challenge-banner">
-                        <span>⚔️ {incomingChallenge.split('@')[0]} challenged you!</span>
-                        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-                            <button onClick={handleAcceptChallenge} className="banner-btn btn-accept">Accept</button>
-                            <button onClick={handleDeclineChallenge} className="banner-btn btn-decline">Decline</button>
-                        </div>
-                    </div>
-                )}
-                {incomingDrawOffer && (
-                    <div className="draw-banner">
-                        <span>🤝 Opponent offered a Draw!</span>
-                        <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-                            <button onClick={acceptDraw} className="banner-btn btn-accept">Accept</button>
-                            <button onClick={handleDeclineDraw} className="banner-btn btn-decline">Decline</button>
-                        </div>
-                    </div>
-                )}
-            </div>
+            {/* MAIN LAYOUT WRAPPER */}
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px', gap: '30px', overflowX: 'auto', flexGrow: 1 }}>
 
-            <div className="game-layout">
                 {/* 1. LEFT: CHESS BOARD & TIMERS */}
-                <div className={`col-board ${mobileTab === 'board' ? 'tab-active' : ''}`}>
-                    <div className="timers-row" style={{ maxWidth: `${boardSize + 8}px` }}>
-                        <div className={`timer-box ${displayGame.turn() === 'w' ? 'active' : ''}`}>⬜ {formatTime(whiteTime)}</div>
-                        <div className={`timer-box ${displayGame.turn() === 'b' ? 'active' : ''}`}>⬛ {formatTime(blackTime)}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minWidth: '560px' }}>
+                    {incomingChallenge && (
+                        <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span>⚔️ {incomingChallenge.split('@')[0]} challenged you!</span>
+                            <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
+                            <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
+                        </div>
+                    )}
+                    {incomingDrawOffer && (
+                        <div style={{ backgroundColor: '#38bdf8', padding: '10px', borderRadius: '8px', marginBottom: '10px', color: '#000', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <span>🤝 Opponent offered a Draw!</span>
+                            <button onClick={acceptDraw} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
+                            <button onClick={handleDeclineDraw} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
+                        </div>
+                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px', fontSize: '20px', fontWeight: 'bold' }}>
+                        <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'w' ? '#38bdf8' : '#333' }}>⬜ {formatTime(whiteTime)}</div>
+                        <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'b' ? '#38bdf8' : '#333' }}>⬛ {formatTime(blackTime)}</div>
                     </div>
-                    <div className="status-label">{status}</div>
-                    
-                    <div className="chess-board" style={{ width: `${boardSize}px`, height: `${boardSize}px`, gridTemplateColumns: `repeat(8, ${squareSize}px)`, gridTemplateRows: `repeat(8, ${squareSize}px)` }}>
-                        {boardItems.map((sq, i) => {
-                            const isSelected = moveFrom === sq.key;
-                            const r = Math.floor(i / 8);
-                            const c = i % 8;
-                            const isDark = (r + c) % 2 === 1; // Correct checkerboard
-                            return (
-                                <div 
-                                    key={sq.key} 
-                                    onClick={() => onSquareClick(sq.key)} 
-                                    className={`square ${isDark ? 'dark' : 'light'} ${isSelected ? 'selected' : ''}`}
-                                    style={{ width: `${squareSize}px`, height: `${squareSize}px` }}
-                                >
-                                    {sq.piece && <img src={pieceImages[sq.piece.color === 'w' ? sq.piece.type.toUpperCase() : sq.piece.type.toLowerCase()]} alt="" />}
-                                    {explosionSquare === sq.key && <div className="star-wars-blast"></div>}
-                                </div>
-                            );
-                        })}
-                    </div>
+                    <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{status}</div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 70px)', border: '6px solid #2c2c2c', borderRadius: '4px' }}>{board}</div>
                 </div>
 
-                {/* 2. MIDDLE: STATS, CHAT, HISTORY */}
-                <aside className={`col-panels ${mobileTab === 'panels' ? 'tab-active' : ''}`}>
-                    <div className="panel-card">
-                        <div className="panel-card-body stats-row">
-                            <div className="stat-item"><span className="stat-key win">WON</span><span className="stat-value">{stats.wins}</span></div>
-                            <div className="stat-item"><span className="stat-key loss">LOSS</span><span className="stat-value">{stats.losses}</span></div>
-                            <div className="stat-item"><span className="stat-key draw">DRAW</span><span className="stat-value">{stats.draws}</span></div>
+                {/* 2. MIDDLE: STATS, CHAT, HISTORY, & DROPDOWN VIEW */}
+                <aside style={{ minWidth: '350px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-around', fontWeight: 'bold', textAlign: 'center' }}>
+                            <div><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '18px' }}>{stats.wins}</div></div>
+                            <div><div style={{ color: '#ef4444', fontSize: '10px' }}>LOSS</div><div style={{ fontSize: '18px' }}>{stats.losses}</div></div>
+                            <div><div style={{ color: '#aaa', fontSize: '10px' }}>DRAW</div><div style={{ fontSize: '18px' }}>{stats.draws}</div></div>
                         </div>
                     </div>
 
-                    <div className="panel-card">
-                        <div className="panel-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>
+                    <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+                            <h4 style={{ color: viewMode === 'tv' ? '#fbbf24' : (viewMode === 'chesscom' ? '#10b981' : '#38bdf8'), margin: 0, fontSize: '12px', textTransform: 'uppercase' }}>
                                 {viewMode === 'tv' ? 'Lichess TV (LIVE)' : (viewMode === 'chesscom' ? 'Chess.com Streamers' : (viewMode === 'online' ? 'ONLINE' : 'ALL MEMBERS'))}
-                            </span>
-                            <select value={viewMode} onChange={(e) => setViewMode(e.target.value)} className="view-select">
+                            </h4>
+                            <select value={viewMode} onChange={(e) => setViewMode(e.target.value)} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '10px', padding: '4px', outline: 'none', cursor: 'pointer' }}>
                                 <option value="online">Online</option>
                                 <option value="all">All Members</option>
                                 <option value="tv">Lichess TV</option>
                                 <option value="chesscom">Chess.com TV</option>
                             </select>
                         </div>
-                        <div className="panel-card-body players-list">
+
+                        <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                             {viewMode === 'online' && onlineUsers.map((u, i) => (
-                                <div key={i} className="player-row">
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
                                     <span>{u.email.split('@')[0]}</span>
-                                    {u.email !== userEmail && <button onClick={() => handleSendChallenge(u.email)} className="challenge-btn">Challenge</button>}
+                                    {u.email !== userEmail && <button onClick={() => handleSendChallenge(u.email)} style={{ fontSize: '9px', cursor: 'pointer' }}>Challenge</button>}
                                 </div>
                             ))}
                             {viewMode === 'all' && allMembers.map((u, i) => (
-                                <div key={i} className="player-row">
+                                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
                                     <span>{u.email.split('@')[0]}</span>
                                 </div>
                             ))}
                             {viewMode === 'tv' && tvGames.map((game, i) => (
-                                <a key={i} href={game.url} target="_blank" rel="noreferrer" className="tv-card">
-                                    <div className="tv-card-ch">📺 {game.channel}</div>
-                                    <div className="tv-card-row"><span>⬜ {game.white}</span> <span style={{ color: '#888' }}>{game.whiteRating}</span></div>
-                                    <div className="tv-card-row" style={{ marginTop: '2px' }}><span>⬛ {game.black}</span> <span style={{ color: '#888' }}>{game.blackRating}</span></div>
+                                <a key={i} href={game.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'block' }}>
+                                    <div style={{ fontSize: '10px', color: '#fbbf24', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '4px' }}>📺 {game.channel}</div>
+                                    <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                                        <span>⬜ {game.white}</span> <span style={{ color: '#888' }}>{game.whiteRating}</span>
+                                    </div>
+                                    <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                        <span>⬛ {game.black}</span> <span style={{ color: '#888' }}>{game.blackRating}</span>
+                                    </div>
                                 </a>
                             ))}
                             {viewMode === 'chesscom' && chessComStreamers.map((streamer, i) => (
-                                <a key={i} href={streamer.twitch_url} target="_blank" rel="noreferrer" className="streamer-card">
-                                    <img src={streamer.avatar} alt={streamer.username} className="streamer-avatar" />
+                                <a key={i} href={streamer.twitch_url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                    <img src={streamer.avatar} alt={streamer.username} style={{ width: '30px', height: '30px', borderRadius: '50%' }} />
                                     <div>
-                                        <div className="streamer-name">{streamer.username}</div>
-                                        <div className="streamer-sub">Live on Twitch 📺</div>
+                                        <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#10b981' }}>{streamer.username}</div>
+                                        <div style={{ fontSize: '10px', color: '#aaa' }}>Live on Twitch 📺</div>
                                     </div>
                                 </a>
                             ))}
                         </div>
                     </div>
 
-                    <div className="panel-card chat-box">
-                        <div className="panel-card-header">GAME CHAT</div>
-                        <div className="chat-messages">
+                    <div style={{ backgroundColor: '#1e1e1e', border: '1px solid #333', borderRadius: '8px', display: 'flex', flexDirection: 'column', height: '220px' }}>
+                        <div style={{ padding: '8px', borderBottom: '1px solid #333', fontSize: '12px', color: '#38bdf8', fontWeight: 'bold' }}>GAME CHAT</div>
+                        <div style={{ flexGrow: 1, overflowY: 'auto', padding: '8px', fontSize: '13px' }}>
                             {chatMessages.map((m, i) => (
-                                <div key={i} className={`chat-msg ${m.sender === userEmail ? 'mine' : 'theirs'}`}>
-                                    <div className={`chat-bubble ${m.sender === userEmail ? 'mine' : 'theirs'}`}>{m.text}</div>
+                                <div key={i} style={{ marginBottom: '8px', textAlign: m.sender === userEmail ? 'right' : 'left' }}>
+                                    <div style={{ display: 'inline-block', padding: '6px 10px', borderRadius: '12px', backgroundColor: m.sender === userEmail ? '#075e54' : '#333', maxWidth: '80%' }}>{m.text}</div>
                                 </div>
                             ))}
                             <div ref={chatEndRef} />
                         </div>
-                        <form onSubmit={sendChatMessage} className="chat-form">
-                            <input disabled={!opponent} type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={opponent ? "Type message..." : "Chat locked"} className="chat-input" />
-                            <button type="submit" className="chat-send">Send</button>
+                        <form onSubmit={sendChatMessage} style={{ display: 'flex', borderTop: '1px solid #333' }}>
+                            <input disabled={!opponent} type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={opponent ? "Type message..." : "Chat locked"} style={{ flexGrow: 1, padding: '10px', backgroundColor: 'transparent', color: 'white', border: 'none', outline: 'none' }} />
+                            <button type="submit" style={{ backgroundColor: '#38bdf8', border: 'none', color: 'black', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>Send</button>
                         </form>
                     </div>
 
-                    <div className="controls-row">
-                        <button onClick={() => lobbyChannel.send({ type: 'broadcast', event: 'drawOffer', payload: { targetEmail: opponent } })} disabled={!opponent || isGameOverManually} className="ctrl-btn">🤝 Draw</button>
-                        <button onClick={handleResign} disabled={!opponent || isGameOverManually} className="ctrl-btn">🏳️ Resign</button>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <button onClick={() => lobbyChannel.send({ type: 'broadcast', event: 'drawOffer', payload: { targetEmail: opponent } })} disabled={!opponent || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer' }}>🤝 Draw</button>
+                        <button onClick={handleResign} disabled={!opponent || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer' }}>🏳️ Resign</button>
                     </div>
 
-                    <button onClick={() => { setOpponent(null); resetMatch(); setStatus("Playing Computer"); }} className="play-computer-btn">Play Computer</button>
+                    {/* ✨ ADDED: setIsPlayingComputer(true) below */}
+                    <button onClick={() => { setOpponent(null); setIsPlayingComputer(true); resetMatch(); setStatus("Playing Computer"); }} style={{ width: '100%', padding: '10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}>Play Computer</button>
 
-                    <div className="panel-card" style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: '140px' }}>
-                        <div className="panel-card-header">HISTORY</div>
-                        <div className="panel-card-body history-list">
+                    <button
+                        onClick={() => setGunshotEnabled(!gunshotEnabled)}
+                        style={{ width: '100%', padding: '10px', backgroundColor: gunshotEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold' }}
+                    >
+                        {gunshotEnabled ? 'Turn off gunshot' : 'Turn on gunshot'}
+                    </button>
+
+                    <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexGrow: 1, display: 'flex', flexDirection: 'column', maxHeight: '180px' }}>
+                        <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#aaa' }}>HISTORY</h4>
+                        <div style={{ overflowY: 'auto', flexGrow: 1, fontSize: '12px' }}>
                             {formattedHistory.map((row, i) => (
-                                <div key={i} className="history-row">
-                                    <span className="history-num">{row.turn}.</span>
-                                    <span className={`history-move ${currentMoveIndex === (i * 2) + 1 ? 'current' : ''}`}>{row.w}</span>
-                                    <span className={`history-move ${currentMoveIndex === (i * 2) + 2 ? 'current' : ''}`}>{row.b}</span>
+                                <div key={i} style={{ padding: '3px 0', borderBottom: '1px solid #222' }}>
+                                    <span style={{ color: '#666', marginRight: '8px' }}>{row.turn}.</span>
+                                    <b style={{ color: currentMoveIndex === (i * 2) + 1 ? '#38bdf8' : 'white' }}>{row.w}</b> &nbsp;&nbsp;
+                                    <b style={{ color: currentMoveIndex === (i * 2) + 2 ? '#38bdf8' : 'white' }}>{row.b}</b>
                                 </div>
                             ))}
                         </div>
-                        <div className="history-nav">
-                            <button onClick={() => setCurrentMoveIndex(0)} className="nav-btn">⏪</button>
-                            <button onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))} className="nav-btn">◀️</button>
-                            <button onClick={() => setCurrentMoveIndex(prev => Math.min(moveHistory.length, prev + 1))} className="nav-btn">▶️</button>
-                            <button onClick={() => setCurrentMoveIndex(moveHistory.length)} className="nav-btn">⏩</button>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
+                            <button onClick={() => setCurrentMoveIndex(0)}>⏪</button>
+                            <button onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}>◀️</button>
+                            <button onClick={() => setCurrentMoveIndex(prev => Math.min(moveHistory.length, prev + 1))}>▶️</button>
+                            <button onClick={() => setCurrentMoveIndex(moveHistory.length)}>⏩</button>
                         </div>
                     </div>
                 </aside>
 
+
                 {/* 3. RIGHT: 50 TRAVEL ADS COLUMN */}
-                <aside className={`col-ads ${mobileTab === 'ads' ? 'tab-active' : ''}`}>
-                    <div className="ads-header">✈️ TRAVEL DEALS (50)</div>
-                    <div className="ads-scroll">
+                <div style={{ minWidth: '320px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 100px)' }}>
+                    <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '14px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', zIndex: 10 }}>
+                        ✈️ TRAVEL DEALS (50)
+                    </div>
+                    <div style={{ flex: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 0 }}>
                         {travelAds.map(ad => (
-                            <a key={ad.id} href={ad.url} target="_blank" rel="noreferrer" className="ad-card">
-                                <img src={ad.img} alt="Travel Destination" loading="lazy" className="ad-img" />
-                                <div className="ad-body">
-                                    <div className="ad-tag">{ad.tag}</div>
-                                    <div className="ad-name">{ad.name}</div>
+                            <a key={ad.id} href={ad.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', borderRadius: '8px', overflow: 'hidden', border: '1px solid #444', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                                <img src={ad.img} alt="Travel Destination" loading="lazy" style={{ width: '100%', height: '150px', objectFit: 'cover', backgroundColor: '#444' }} />
+                                <div style={{ padding: '12px' }}>
+                                    <div style={{ fontSize: '13px', color: '#38bdf8', fontWeight: 'bold', marginBottom: '4px' }}>{ad.tag}</div>
+                                    <div style={{ fontSize: '16px', color: 'white', fontWeight: '600' }}>{ad.name}</div>
                                 </div>
                             </a>
                         ))}
                     </div>
-                </aside>
+                </div>
+
             </div>
 
-            {/* MOBILE TAB BAR */}
-            <div className="mobile-tab-bar">
-                <button onClick={() => setMobileTab('board')} className={`mobile-tab ${mobileTab === 'board' ? 'active' : ''}`}>
-                    <span className="tab-icon">♟️</span> Board
-                </button>
-                <button onClick={() => setMobileTab('panels')} className={`mobile-tab ${mobileTab === 'panels' ? 'active' : ''}`}>
-                    <span className="tab-icon">💬</span> Chat/Stats
-                </button>
-                <button onClick={() => setMobileTab('ads')} className={`mobile-tab ${mobileTab === 'ads' ? 'active' : ''}`}>
-                    <span className="tab-icon">✈️</span> Travel
-                </button>
-            </div>
+            {/* ✨ ADDED: FOOTER COMPONENT */}
+            <footer style={{ textAlign: 'center', padding: '15px', color: '#888', fontSize: '14px', borderTop: '1px solid #333', backgroundColor: '#1e1e1e', marginTop: 'auto' }}>
+                NoirSoft Creation {new Date().getFullYear()}
+            </footer>
+
         </div>
     );
 }
