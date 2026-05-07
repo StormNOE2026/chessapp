@@ -11,6 +11,8 @@ const sounds = {
     capture: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Capture.mp3',
     check: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Check.mp3',
     castle: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Move.mp3',
+    // ⚡ Using a direct web URL so it works immediately without local files
+    thunder: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_7845f4fae2.mp3',
 };
 
 // --- Helper for Text-to-Speech ---
@@ -479,6 +481,20 @@ function ChessGame({ user, onLogout }) {
             if (!isGameOverManually) {
                 setIsGameOverManually(true);
                 speak(msg);
+
+                // ⚡ THUNDER SOUND EXECUTED HERE ⚡
+                new Audio(sounds.thunder).play().catch((err) => console.error("Thunder sound failed to play:", err));
+
+                // 🔫 NEW: FIRE THREE SHOTS 🔫
+                if (gunshotEnabledRef.current) {
+                    const delayBetweenShots = 400; // Adjust this in milliseconds to change the speed of the shots
+                    for (let i = 0; i < 3; i++) {
+                        setTimeout(() => {
+                            new Audio('/shotgun.mp3').play().catch(() => { });
+                        }, i * delayBetweenShots);
+                    }
+                }
+
                 recordResult(playerColor === loserColor ? 'loss' : 'win');
             }
         } else if (displayGame.isDraw()) {
