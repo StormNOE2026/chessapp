@@ -398,8 +398,8 @@ function ChessGame({ user, onLogout }) {
         // Postgres subscription for the 'comments' table
         const commentsSub = supabase.channel('public:comments')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
-                // If it's from us, we already optimistically added it, but just in case, we can filter or just append
                 setCommunityMessages(prev => {
+                    // Prevent duplicates if the message was sent by us
                     if (prev.find(m => m.id === payload.new.id)) return prev;
                     return [...prev, payload.new];
                 });
@@ -485,13 +485,26 @@ function ChessGame({ user, onLogout }) {
 
         const newMsg = { text: communityInput, senderEmail: userEmail };
 
-        // Optimistic update for snappy UI
-        setCommunityMessages(prev => [...prev, { ...newMsg, id: Date.now() }]);
+        // Clear the input field instantly for a snappy UI
         setCommunityInput('');
 
-        // Push to database
-        const { error } = await supabase.from('comments').insert([newMsg]);
-        if (error) console.error("Error sending community message:", error.message);
+        // Push to database and return the newly created row with its REAL id
+        const { data, error } = await supabase
+            .from('comments')
+            .insert([newMsg])
+            .select()
+            .single();
+
+        if (error) {
+            console.error("Error sending community message:", error.message);
+        } else if (data) {
+            // Update UI with the real database row
+            setCommunityMessages(prev => {
+                // Double-check to prevent duplicates
+                if (prev.find(m => m.id === data.id)) return prev;
+                return [...prev, data];
+            });
+        }
     };
 
     const handleSendChallenge = async (targetEmail) => {
@@ -709,10 +722,10 @@ function ChessGame({ user, onLogout }) {
                     </div>
                 </header>
 
-                {/* --- SCROLLABLE BOARD AREA --- */}
+                {/* --- SCROLLABLE MAIN AREA --- */}
                 <div style={{ display: 'flex', flexGrow: 1, padding: '20px', gap: '30px', overflowX: 'auto', overflowY: 'hidden', justifyContent: 'center' }}>
 
-                    {/* Column 1: Community Chat (NEWLY MOVED TO LEFT) */}
+                    {/* Column 1: Community Chat (FAR LEFT) */}
                     <div style={{ width: '250px', minWidth: '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                             🌍 COMMUNITY CHAT
@@ -759,7 +772,7 @@ function ChessGame({ user, onLogout }) {
                         </div>
                     </div>
 
-                    {/* Column 3: Menus & Chat (RIGHT OF BOARD) */}
+                    {/* Column 3: Menus & Game Chat (RIGHT OF BOARD) */}
                     <aside style={{ width: '300px', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', paddingRight: '5px' }}>
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-around', fontWeight: 'bold', textAlign: 'center' }}>
@@ -876,10 +889,10 @@ function ChessGame({ user, onLogout }) {
                                 ))}
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
-                                <button style={{ border: 'none', background: 'none', cursor: 'pointer' }} onClick={() => setCurrentMoveIndex(0)}>⏪</button>
-                                <button style={{ border: 'none', background: 'none', cursor: 'pointer' }} onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}>◀️</button>
-                                <button style={{ border: 'none', background: 'none', cursor: 'pointer' }} onClick={() => setCurrentMoveIndex(prev => Math.min(moveHistory.length, prev + 1))}>▶️</button>
-                                <button style={{ border: 'none', background: 'none', cursor: 'pointer' }} onClick={() => setCurrentMoveIndex(moveHistory.length)}>⏩</button>
+                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(0)}>⏪</button>
+                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}>◀️</button>
+                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(prev => Math.min(moveHistory.length, prev + 1))}>▶️</button>
+                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(moveHistory.length)}>⏩</button>
                             </div>
                         </div>
                     </aside>
