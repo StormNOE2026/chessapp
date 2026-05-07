@@ -183,6 +183,7 @@ function ChessGame({ user, onLogout }) {
     const [blackTime, setBlackTime] = useState(300);
 
     const timerRef = useRef(null);
+    const mySocketId = useRef(Math.random().toString(36).substring(7));
     const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0 });
     const [isGameOverManually, setIsGameOverManually] = useState(false);
 
@@ -392,14 +393,18 @@ function ChessGame({ user, onLogout }) {
                 if (payload.targetEmail === userEmail) { setStatus("Draw offer declined."); setIncomingDrawOffer(false); }
             })
             .subscribe(async (s) => {
-                if (s === 'SUBSCRIBED') await channel.track({ email: userEmail, socketId: Math.random().toString(36).substring(7) });
+                if (s === 'SUBSCRIBED') await channel.track({
+                    email: userEmail,
+                    socketId: mySocketId.current,
+                    isPlaying: !!(opponent || isPlayingComputer)
+                });
             });
 
         // Postgres subscription for the 'comments' table
-        const commentsSub = supabase.channel('public:comments')
+        const commentsSub = supabase.channel('custom-all-comments')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
                 setCommunityMessages(prev => {
-                    // Prevent duplicates if the message was sent by us
+                    // Prevent duplicates in case the Realtime event fires twice
                     if (prev.find(m => m.id === payload.new.id)) return prev;
                     return [...prev, payload.new];
                 });
@@ -411,6 +416,17 @@ function ChessGame({ user, onLogout }) {
             supabase.removeChannel(commentsSub);
         };
     }, [userEmail, isGameOverManually]);
+
+    // --- Update Presence Status dynamically when game starts/ends ---
+    useEffect(() => {
+        if (lobbyChannel) {
+            lobbyChannel.track({
+                email: userEmail,
+                socketId: mySocketId.current,
+                isPlaying: !!(opponent || isPlayingComputer)
+            }).catch(() => { });
+        }
+    }, [opponent, isPlayingComputer, lobbyChannel, userEmail]);
 
     // --- Timer Logic ---
     useEffect(() => {
@@ -485,26 +501,14 @@ function ChessGame({ user, onLogout }) {
 
         const newMsg = { text: communityInput, senderEmail: userEmail };
 
-        // Clear the input field instantly for a snappy UI
+        // ONLY clear the input field locally. 
+        // We let the Supabase Realtime Listener (in the useEffect) handle adding it to the screen 
+        // so it never renders twice.
         setCommunityInput('');
 
-        // Push to database and return the newly created row with its REAL id
-        const { data, error } = await supabase
-            .from('comments')
-            .insert([newMsg])
-            .select()
-            .single();
+        const { error } = await supabase.from('comments').insert([newMsg]);
 
-        if (error) {
-            console.error("Error sending community message:", error.message);
-        } else if (data) {
-            // Update UI with the real database row
-            setCommunityMessages(prev => {
-                // Double-check to prevent duplicates
-                if (prev.find(m => m.id === data.id)) return prev;
-                return [...prev, data];
-            });
-        }
+        if (error) console.error("Error sending community message:", error.message);
     };
 
     const handleSendChallenge = async (targetEmail) => {
@@ -934,7 +938,7 @@ function ChessGame({ user, onLogout }) {
                     <div style={{ display: 'flex', gap: '25px', fontSize: '13px', fontWeight: 'bold' }}>
                         <span style={{ color: '#aaa' }}>👥 Members: {allMembers.length}</span>
                         <span style={{ color: '#10b981' }}>🟢 Online: {onlineUsers.length}</span>
-                        <span style={{ color: '#f97316' }}>⚔️ Playing: {opponent || isPlayingComputer ? 'You are playing' : 'Waiting in lobby'}</span>
+                        <span style={{ color: '#f97316' }}>⚔️ Playing: {onlineUsers.filter(u => u.isPlaying).length}</span>
                     </div>
                 </footer>
 
