@@ -554,15 +554,38 @@ function ChessGame({ user, onLogout }) {
         setIncomingChallenge(null);
     };
 
+    // --- NEW: Resign logic updated to handle computer matches ---
     const handleResign = () => {
-        if (isGameOverManually || !opponent) return;
+        if (isGameOverManually || (!opponent && !isPlayingComputer)) return;
+
         if (window.confirm("Are you sure you want to resign?")) {
             setIsGameOverManually(true);
             const msg = "You resigned. You Lose!";
             setStatus(msg);
             speak(msg);
             recordResult('loss');
-            lobbyChannel.send({ type: 'broadcast', event: 'resign', payload: { targetEmail: opponentRef.current } });
+
+            // Only send broadcast if playing a real opponent
+            if (opponent) {
+                lobbyChannel.send({ type: 'broadcast', event: 'resign', payload: { targetEmail: opponentRef.current } });
+            }
+        }
+    };
+
+    // --- NEW: Draw logic pulled out into function to handle computer matches ---
+    const handleDrawOffer = () => {
+        if (isGameOverManually || (!opponent && !isPlayingComputer)) return;
+
+        if (opponent) {
+            lobbyChannel.send({ type: 'broadcast', event: 'drawOffer', payload: { targetEmail: opponent } });
+            setStatus("Draw offer sent...");
+        } else if (isPlayingComputer) {
+            // AI immediately accepts draw
+            setIsGameOverManually(true);
+            const msg = "Computer accepts the draw!";
+            setStatus(msg);
+            speak(msg);
+            recordResult('draw');
         }
     };
 
@@ -878,9 +901,10 @@ function ChessGame({ user, onLogout }) {
                             </form>
                         </div>
 
+                        {/* --- NEW: Draw and Resign Buttons updated for computer play --- */}
                         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-                            <button onClick={() => lobbyChannel.send({ type: 'broadcast', event: 'drawOffer', payload: { targetEmail: opponent } })} disabled={!opponent || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>🤝 Draw</button>
-                            <button onClick={handleResign} disabled={!opponent || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>🏳️ Resign</button>
+                            <button onClick={handleDrawOffer} disabled={(!opponent && !isPlayingComputer) || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>🤝 Draw</button>
+                            <button onClick={handleResign} disabled={(!opponent && !isPlayingComputer) || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>🏳️ Resign</button>
                         </div>
 
                         <button onClick={() => {
