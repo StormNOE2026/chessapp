@@ -191,12 +191,17 @@ function ChessGame({ user, onLogout }) {
     const [gunshotEnabled, setGunshotEnabled] = useState(true);
     const gunshotEnabledRef = useRef(gunshotEnabled);
 
+    // --- NEW: Chat TTS State & Ref ---
+    const [speakChatEnabled, setSpeakChatEnabled] = useState(false);
+    const speakChatEnabledRef = useRef(speakChatEnabled);
+
     // --- SIDEBAR STATE ---
     const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
     useEffect(() => {
         gunshotEnabledRef.current = gunshotEnabled;
-    }, [gunshotEnabled]);
+        speakChatEnabledRef.current = speakChatEnabled;
+    }, [gunshotEnabled, speakChatEnabled]);
 
     const opponentRef = useRef(null);
     const gameRef = useRef(new Chess());
@@ -374,6 +379,10 @@ function ChessGame({ user, onLogout }) {
             .on('broadcast', { event: 'chat' }, ({ payload }) => {
                 if (payload.targetEmail === userEmail && payload.senderEmail === opponentRef.current) {
                     setChatMessages(prev => [...prev, { text: payload.text, sender: payload.senderEmail }]);
+                    // --- NEW: Speak incoming chat messages if enabled ---
+                    if (speakChatEnabledRef.current) {
+                        speak(payload.text);
+                    }
                 }
             })
             .on('broadcast', { event: 'resign' }, ({ payload }) => {
@@ -648,7 +657,6 @@ function ChessGame({ user, onLogout }) {
         });
     });
 
-    // Sidebar items array (Removed Play, Puzzles, and More)
     const sideMenuItems = [
         { icon: '👨‍🏫', label: 'Coach' },
         { icon: '👁️', label: 'Watch' },
@@ -888,6 +896,14 @@ function ChessGame({ user, onLogout }) {
                             style={{ width: '100%', padding: '10px', backgroundColor: gunshotEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}
                         >
                             {gunshotEnabled ? 'Turn off gunshot' : 'Turn on gunshot'}
+                        </button>
+
+                        {/* --- NEW BUTTON: Chat TTS Toggle --- */}
+                        <button
+                            onClick={() => setSpeakChatEnabled(!speakChatEnabled)}
+                            style={{ width: '100%', padding: '10px', backgroundColor: speakChatEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}
+                        >
+                            {speakChatEnabled ? 'Turn off Chat Speak' : 'Turn on Chat Speak'}
                         </button>
 
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: '150px' }}>
