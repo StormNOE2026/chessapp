@@ -261,7 +261,6 @@ function ChessGame({ user, onLogout }) {
         }
     };
 
-    // ✨ UPDATED: Added speech for "Check"
     const playMoveSound = (move, gameInstance) => {
         let audioUrl = sounds.move;
         if (gameInstance.inCheck()) {
@@ -407,7 +406,6 @@ function ChessGame({ user, onLogout }) {
         }
     }, [whiteTime, blackTime, isGameOverManually, playerColor]);
 
-    // ✨ UPDATED: Check for Checkmate/Draw and speak "Your move"
     useEffect(() => {
         if (displayGame.isCheckmate()) {
             const loserColor = displayGame.turn();
@@ -431,7 +429,6 @@ function ChessGame({ user, onLogout }) {
             const isMyTurn = displayGame.turn() === playerColor;
             const newStatus = isMyTurn ? "🟢 Your turn" : "🔴 Waiting...";
 
-            // Only update and speak if moves have happened, so we don't overwrite "Game started"
             if (moveHistory.length > 0 && status !== newStatus) {
                 setStatus(newStatus);
                 if (isMyTurn) {
@@ -764,9 +761,33 @@ function ChessGame({ user, onLogout }) {
 
             </div>
 
-            <footer style={{ textAlign: 'center', padding: '15px', color: '#888', fontSize: '14px', borderTop: '1px solid #333', backgroundColor: '#1e1e1e', marginTop: 'auto' }}>
-                NoirSoft Creation {new Date().getFullYear()}
+            {/* --- UPDATED FOOTER SECTION --- */}
+            <footer style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '15px 30px',
+                color: '#888',
+                fontSize: '14px',
+                borderTop: '1px solid #333',
+                backgroundColor: '#1e1e1e',
+                marginTop: 'auto'
+            }}>
+                <div>NoirSoft Creation {new Date().getFullYear()}</div>
+
+                <div style={{ display: 'flex', gap: '25px', fontSize: '13px', fontWeight: 'bold' }}>
+                    <span style={{ color: '#aaa' }}>
+                        👥 Members: {allMembers.length}
+                    </span>
+                    <span style={{ color: '#10b981' }}>
+                        🟢 Online: {onlineUsers.length}
+                    </span>
+                    <span style={{ color: '#f97316' }}>
+                        ⚔️ Playing: {opponent || isPlayingComputer ? 'You are playing' : 'Waiting in lobby'}
+                    </span>
+                </div>
             </footer>
+            {/* --- END UPDATED FOOTER SECTION --- */}
 
         </div>
     );
