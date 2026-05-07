@@ -118,9 +118,14 @@ function AuthScreen({ onAuthSuccess }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
+
+        // CLEAN THE EMAIL INPUT HERE
+        const cleanEmail = email.trim().toLowerCase();
+
         let { data, error } = isLogin
-            ? await supabase.auth.signInWithPassword({ email, password })
-            : await supabase.auth.signUp({ email, password });
+            ? await supabase.auth.signInWithPassword({ email: cleanEmail, password })
+            : await supabase.auth.signUp({ email: cleanEmail, password });
+
         setLoading(false);
         if (error) alert(error.message);
         else if (data?.user) onAuthSuccess(data.user);
