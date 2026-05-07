@@ -171,7 +171,8 @@ function ChessGame({ user, onLogout }) {
     const [chatInput, setChatInput] = useState('');
     const chatEndRef = useRef(null);
 
-    // Community Chat (Database bound)
+    // Community Chat (Database bound & toggleable)
+    const [showCommunityChat, setShowCommunityChat] = useState(false);
     const [communityMessages, setCommunityMessages] = useState([]);
     const [communityInput, setCommunityInput] = useState('');
     const communityEndRef = useRef(null);
@@ -229,7 +230,13 @@ function ChessGame({ user, onLogout }) {
     }, []);
 
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
-    useEffect(() => { communityEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [communityMessages]);
+
+    // Auto-scroll community chat when it updates or becomes visible
+    useEffect(() => {
+        if (showCommunityChat) {
+            communityEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }
+    }, [communityMessages, showCommunityChat]);
 
     const fetchUserStats = async () => {
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
@@ -685,7 +692,7 @@ function ChessGame({ user, onLogout }) {
                         key={item.label}
                         onClick={() => {
                             if (item.label === 'Community') {
-                                document.getElementById('community-input')?.focus();
+                                setShowCommunityChat(prev => !prev);
                             }
                         }}
                         style={{
@@ -729,24 +736,26 @@ function ChessGame({ user, onLogout }) {
                 {/* --- SCROLLABLE MAIN AREA --- */}
                 <div style={{ display: 'flex', flexGrow: 1, padding: '20px', gap: '30px', overflowX: 'auto', overflowY: 'hidden', justifyContent: 'center' }}>
 
-                    {/* Column 1: Community Chat (FAR LEFT) */}
-                    <div style={{ width: '250px', minWidth: '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
-                        <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
-                            🌍 COMMUNITY CHAT
+                    {/* Column 1: Community Chat (TOGGLEABLE) */}
+                    {showCommunityChat && (
+                        <div style={{ width: '250px', minWidth: '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                            <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
+                                🌍 COMMUNITY CHAT
+                            </div>
+                            <div style={{ flexGrow: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                {communityMessages.map((m, i) => (
+                                    <div key={i} style={{ backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', fontSize: '11px', wordWrap: 'break-word' }}>
+                                        <strong style={{ color: m.senderEmail === userEmail ? '#38bdf8' : '#10b981' }}>{m.senderEmail?.split('@')[0] || 'Unknown'}:</strong> <span style={{ color: '#ddd' }}>{m.text}</span>
+                                    </div>
+                                ))}
+                                <div ref={communityEndRef} />
+                            </div>
+                            <form onSubmit={sendCommunityMessage} style={{ display: 'flex', borderTop: '1px solid #333', padding: '10px' }}>
+                                <input id="community-input" type="text" value={communityInput} onChange={e => setCommunityInput(e.target.value)} placeholder="Say something..." style={{ flexGrow: 1, padding: '8px', backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px 0 0 4px', outline: 'none', fontSize: '11px', minWidth: 0 }} />
+                                <button type="submit" style={{ backgroundColor: '#f97316', border: 'none', color: 'white', padding: '0 10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '0 4px 4px 0', fontSize: '11px' }}>Send</button>
+                            </form>
                         </div>
-                        <div style={{ flexGrow: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                            {communityMessages.map((m, i) => (
-                                <div key={i} style={{ backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', fontSize: '11px', wordWrap: 'break-word' }}>
-                                    <strong style={{ color: m.senderEmail === userEmail ? '#38bdf8' : '#10b981' }}>{m.senderEmail?.split('@')[0] || 'Unknown'}:</strong> <span style={{ color: '#ddd' }}>{m.text}</span>
-                                </div>
-                            ))}
-                            <div ref={communityEndRef} />
-                        </div>
-                        <form onSubmit={sendCommunityMessage} style={{ display: 'flex', borderTop: '1px solid #333', padding: '10px' }}>
-                            <input id="community-input" type="text" value={communityInput} onChange={e => setCommunityInput(e.target.value)} placeholder="Say something..." style={{ flexGrow: 1, padding: '8px', backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px 0 0 4px', outline: 'none', fontSize: '11px', minWidth: 0 }} />
-                            <button type="submit" style={{ backgroundColor: '#f97316', border: 'none', color: 'white', padding: '0 10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '0 4px 4px 0', fontSize: '11px' }}>Send</button>
-                        </form>
-                    </div>
+                    )}
 
                     {/* Column 2: Chess Board (CENTER) */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexGrow: 1, overflowY: 'auto' }}>
