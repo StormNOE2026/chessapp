@@ -171,7 +171,7 @@ function ChessGame({ user, onLogout }) {
     const [chatInput, setChatInput] = useState('');
     const chatEndRef = useRef(null);
 
-    // Community Chat
+    // Community Chat (Database bound)
     const [communityMessages, setCommunityMessages] = useState([]);
     const [communityInput, setCommunityInput] = useState('');
     const communityEndRef = useRef(null);
@@ -224,6 +224,7 @@ function ChessGame({ user, onLogout }) {
         fetchAllMembers();
         fetchTvGames();
         fetchChessComTv();
+        fetchCommunityComments();
     }, []);
 
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
@@ -237,6 +238,11 @@ function ChessGame({ user, onLogout }) {
     const fetchAllMembers = async () => {
         let { data } = await supabase.from('profiles').select('email');
         if (data) setAllMembers(data);
+    };
+
+    const fetchCommunityComments = async () => {
+        let { data } = await supabase.from('comments').select('*').order('created_at', { ascending: false }).limit(50);
+        if (data) setCommunityMessages(data.reverse()); // Reverse so newest are at the bottom
     };
 
     const fetchTvGames = async () => {
@@ -362,9 +368,6 @@ function ChessGame({ user, onLogout }) {
                     setChatMessages(prev => [...prev, { text: payload.text, sender: payload.senderEmail }]);
                 }
             })
-            .on('broadcast', { event: 'community_chat' }, ({ payload }) => {
-                setCommunityMessages(prev => [...prev, payload]);
-            })
             .on('broadcast', { event: 'resign' }, ({ payload }) => {
                 if (payload.targetEmail === userEmail && !isGameOverManually) {
                     setIsGameOverManually(true);
@@ -392,7 +395,21 @@ function ChessGame({ user, onLogout }) {
                 if (s === 'SUBSCRIBED') await channel.track({ email: userEmail, socketId: Math.random().toString(36).substring(7) });
             });
 
-        return () => { supabase.removeChannel(channel); };
+        // Postgres subscription for the 'comments' table
+        const commentsSub = supabase.channel('public:comments')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
+                // If it's from us, we already optimistically added it, but just in case, we can filter or just append
+                setCommunityMessages(prev => {
+                    if (prev.find(m => m.id === payload.new.id)) return prev;
+                    return [...prev, payload.new];
+                });
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+            supabase.removeChannel(commentsSub);
+        };
     }, [userEmail, isGameOverManually]);
 
     // --- Timer Logic ---
@@ -465,10 +482,16 @@ function ChessGame({ user, onLogout }) {
     const sendCommunityMessage = async (e) => {
         e.preventDefault();
         if (!communityInput.trim()) return;
+
         const newMsg = { text: communityInput, senderEmail: userEmail };
-        await lobbyChannel.send({ type: 'broadcast', event: 'community_chat', payload: newMsg });
-        setCommunityMessages(prev => [...prev, newMsg]);
+
+        // Optimistic update for snappy UI
+        setCommunityMessages(prev => [...prev, { ...newMsg, id: Date.now() }]);
         setCommunityInput('');
+
+        // Push to database
+        const { error } = await supabase.from('comments').insert([newMsg]);
+        if (error) console.error("Error sending community message:", error.message);
     };
 
     const handleSendChallenge = async (targetEmail) => {
@@ -601,7 +624,7 @@ function ChessGame({ user, onLogout }) {
         });
     });
 
-    // Sidebar items array (Updated "Social" to "Community")
+    // Sidebar items array
     const sideMenuItems = [
         { icon: '♟️', label: 'Play' },
         { icon: '🧩', label: 'Puzzles' },
@@ -645,7 +668,7 @@ function ChessGame({ user, onLogout }) {
                         key={item.label}
                         onClick={() => {
                             if (item.label === 'Community') {
-                                setViewMode('community');
+                                document.getElementById('community-input')?.focus();
                             }
                         }}
                         style={{
@@ -689,7 +712,26 @@ function ChessGame({ user, onLogout }) {
                 {/* --- SCROLLABLE BOARD AREA --- */}
                 <div style={{ display: 'flex', flexGrow: 1, padding: '20px', gap: '30px', overflowX: 'auto', overflowY: 'hidden', justifyContent: 'center' }}>
 
-                    {/* Column 1: Chess Board (CENTERED ON LEFT SIDE) */}
+                    {/* Column 1: Community Chat (NEWLY MOVED TO LEFT) */}
+                    <div style={{ width: '250px', minWidth: '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                        <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
+                            🌍 COMMUNITY CHAT
+                        </div>
+                        <div style={{ flexGrow: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                            {communityMessages.map((m, i) => (
+                                <div key={i} style={{ backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', fontSize: '11px', wordWrap: 'break-word' }}>
+                                    <strong style={{ color: m.senderEmail === userEmail ? '#38bdf8' : '#10b981' }}>{m.senderEmail?.split('@')[0] || 'Unknown'}:</strong> <span style={{ color: '#ddd' }}>{m.text}</span>
+                                </div>
+                            ))}
+                            <div ref={communityEndRef} />
+                        </div>
+                        <form onSubmit={sendCommunityMessage} style={{ display: 'flex', borderTop: '1px solid #333', padding: '10px' }}>
+                            <input id="community-input" type="text" value={communityInput} onChange={e => setCommunityInput(e.target.value)} placeholder="Say something..." style={{ flexGrow: 1, padding: '8px', backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px 0 0 4px', outline: 'none', fontSize: '11px', minWidth: 0 }} />
+                            <button type="submit" style={{ backgroundColor: '#f97316', border: 'none', color: 'white', padding: '0 10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '0 4px 4px 0', fontSize: '11px' }}>Send</button>
+                        </form>
+                    </div>
+
+                    {/* Column 2: Chess Board (CENTER) */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexGrow: 1, overflowY: 'auto' }}>
                         {incomingChallenge && (
                             <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -717,7 +759,7 @@ function ChessGame({ user, onLogout }) {
                         </div>
                     </div>
 
-                    {/* Column 2: Menus & Chat (MOVED TO THE RIGHT OF THE BOARD) */}
+                    {/* Column 3: Menus & Chat (RIGHT OF BOARD) */}
                     <aside style={{ width: '300px', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', paddingRight: '5px' }}>
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-around', fontWeight: 'bold', textAlign: 'center' }}>
@@ -729,79 +771,61 @@ function ChessGame({ user, onLogout }) {
 
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-                                <h4 style={{ color: viewMode === 'tv' ? '#fbbf24' : (viewMode === 'chesscom' ? '#10b981' : (viewMode === 'community' ? '#f97316' : '#38bdf8')), margin: 0, fontSize: '12px', textTransform: 'uppercase' }}>
-                                    {viewMode === 'tv' ? 'Lichess TV' : (viewMode === 'chesscom' ? 'Chess.com' : (viewMode === 'community' ? 'Community Chat' : (viewMode === 'online' ? 'ONLINE' : 'MEMBERS')))}
+                                <h4 style={{ color: viewMode === 'tv' ? '#fbbf24' : (viewMode === 'chesscom' ? '#10b981' : '#38bdf8'), margin: 0, fontSize: '12px', textTransform: 'uppercase' }}>
+                                    {viewMode === 'tv' ? 'Lichess TV' : (viewMode === 'chesscom' ? 'Chess.com' : (viewMode === 'online' ? 'ONLINE' : 'MEMBERS'))}
                                 </h4>
                                 <select value={viewMode} onChange={(e) => setViewMode(e.target.value)} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '10px', padding: '4px', outline: 'none', cursor: 'pointer' }}>
                                     <option value="online">Online</option>
                                     <option value="all">Members</option>
                                     <option value="tv">Lichess TV</option>
                                     <option value="chesscom">Chess.com</option>
-                                    <option value="community">Community Chat</option>
                                 </select>
                             </div>
 
-                            {viewMode === 'community' ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', height: '150px' }}>
-                                    <div style={{ flexGrow: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px', paddingRight: '5px' }}>
-                                        {communityMessages.map((m, i) => (
-                                            <div key={i} style={{ backgroundColor: '#2c2c2c', padding: '6px', borderRadius: '6px', fontSize: '11px' }}>
-                                                <strong style={{ color: m.senderEmail === userEmail ? '#38bdf8' : '#10b981' }}>{m.senderEmail.split('@')[0]}:</strong> <span style={{ color: '#ddd' }}>{m.text}</span>
-                                            </div>
-                                        ))}
-                                        <div ref={communityEndRef} />
+                            <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                {viewMode === 'online' && (
+                                    <div style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>TIME:</span>
+                                        <select value={challengeTime} onChange={(e) => setChallengeTime(Number(e.target.value))} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: 'pointer' }}>
+                                            <option value={600}>10 Mins</option>
+                                            <option value={86400}>1 Day</option>
+                                            <option value={259200}>3 Days</option>
+                                        </select>
                                     </div>
-                                    <form onSubmit={sendCommunityMessage} style={{ display: 'flex', marginTop: '5px' }}>
-                                        <input type="text" value={communityInput} onChange={e => setCommunityInput(e.target.value)} placeholder="Say something..." style={{ flexGrow: 1, padding: '6px', backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px 0 0 4px', outline: 'none', fontSize: '11px' }} />
-                                        <button type="submit" style={{ backgroundColor: '#f97316', border: 'none', color: 'white', padding: '0 10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '0 4px 4px 0', fontSize: '11px' }}>Send</button>
-                                    </form>
-                                </div>
-                            ) : (
-                                <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                    {viewMode === 'online' && (
-                                        <div style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>TIME:</span>
-                                            <select value={challengeTime} onChange={(e) => setChallengeTime(Number(e.target.value))} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: 'pointer' }}>
-                                                <option value={600}>10 Mins</option>
-                                                <option value={86400}>1 Day</option>
-                                                <option value={259200}>3 Days</option>
-                                            </select>
-                                        </div>
-                                    )}
+                                )}
 
-                                    {viewMode === 'online' && onlineUsers.map((u, i) => (
-                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
-                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span>
-                                            {u.email !== userEmail && <button onClick={() => handleSendChallenge(u.email)} style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#38bdf8', color: '#000', border: 'none', borderRadius: '3px', padding: '2px 5px' }}>Challenge</button>}
+                                {viewMode === 'online' && onlineUsers.map((u, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span>
+                                        {u.email !== userEmail && <button onClick={() => handleSendChallenge(u.email)} style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#38bdf8', color: '#000', border: 'none', borderRadius: '3px', padding: '2px 5px' }}>Challenge</button>}
+                                    </div>
+                                ))}
+                                {viewMode === 'all' && allMembers.map((u, i) => (
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span>
+                                    </div>
+                                ))}
+                                {viewMode === 'tv' && tvGames.map((game, i) => (
+                                    <a key={i} href={game.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'block' }}>
+                                        <div style={{ fontSize: '10px', color: '#fbbf24', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '4px' }}>📺 {game.channel}</div>
+                                        <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                                            <span>⬜ {game.white}</span> <span style={{ color: '#888' }}>{game.whiteRating}</span>
                                         </div>
-                                    ))}
-                                    {viewMode === 'all' && allMembers.map((u, i) => (
-                                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
-                                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span>
+                                        <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
+                                            <span>⬛ {game.black}</span> <span style={{ color: '#888' }}>{game.blackRating}</span>
                                         </div>
-                                    ))}
-                                    {viewMode === 'tv' && tvGames.map((game, i) => (
-                                        <a key={i} href={game.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'block' }}>
-                                            <div style={{ fontSize: '10px', color: '#fbbf24', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '4px' }}>📺 {game.channel}</div>
-                                            <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                                                <span>⬜ {game.white}</span> <span style={{ color: '#888' }}>{game.whiteRating}</span>
-                                            </div>
-                                            <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                                                <span>⬛ {game.black}</span> <span style={{ color: '#888' }}>{game.blackRating}</span>
-                                            </div>
-                                        </a>
-                                    ))}
-                                    {viewMode === 'chesscom' && chessComStreamers.map((streamer, i) => (
-                                        <a key={i} href={streamer.twitch_url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <img src={streamer.avatar} alt={streamer.username} style={{ width: '30px', height: '30px', borderRadius: '50%' }} />
-                                            <div style={{ overflow: 'hidden' }}>
-                                                <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#10b981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{streamer.username}</div>
-                                                <div style={{ fontSize: '10px', color: '#aaa' }}>Live on Twitch 📺</div>
-                                            </div>
-                                        </a>
-                                    ))}
-                                </div>
-                            )}
+                                    </a>
+                                ))}
+                                {viewMode === 'chesscom' && chessComStreamers.map((streamer, i) => (
+                                    <a key={i} href={streamer.twitch_url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                        <img src={streamer.avatar} alt={streamer.username} style={{ width: '30px', height: '30px', borderRadius: '50%' }} />
+                                        <div style={{ overflow: 'hidden' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#10b981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{streamer.username}</div>
+                                            <div style={{ fontSize: '10px', color: '#aaa' }}>Live on Twitch 📺</div>
+                                        </div>
+                                    </a>
+                                ))}
+                            </div>
                         </div>
 
                         <div style={{ backgroundColor: '#1e1e1e', border: '1px solid #333', borderRadius: '8px', display: 'flex', flexDirection: 'column', height: '220px', flexShrink: 0 }}>
@@ -860,7 +884,7 @@ function ChessGame({ user, onLogout }) {
                         </div>
                     </aside>
 
-                    {/* Column 3: Travel Ads (FAR RIGHT) */}
+                    {/* Column 4: Travel Ads (FAR RIGHT) */}
                     <div style={{ width: '220px', minWidth: '220px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                             ✈️ TRAVEL DEALS (50)
