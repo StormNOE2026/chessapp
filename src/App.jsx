@@ -648,15 +648,12 @@ function ChessGame({ user, onLogout }) {
         });
     });
 
-    // Sidebar items array
+    // Sidebar items array (Removed Play, Puzzles, and More)
     const sideMenuItems = [
-        { icon: '♟️', label: 'Play' },
-        { icon: '🧩', label: 'Puzzles' },
         { icon: '👨‍🏫', label: 'Coach' },
         { icon: '👁️', label: 'Watch' },
         { icon: '📰', label: 'News' },
-        { icon: '👥', label: 'Community' },
-        { icon: '⭐', label: 'More' }
+        { icon: '👥', label: 'Community' }
     ];
 
     // ==========================================
@@ -693,6 +690,9 @@ function ChessGame({ user, onLogout }) {
                         onClick={() => {
                             if (item.label === 'Community') {
                                 setShowCommunityChat(prev => !prev);
+                                setTimeout(() => document.getElementById('community-input')?.focus(), 100);
+                            } else if (item.label === 'Coach') {
+                                window.open('https://www.chess.com/play/coach', '_blank', 'noopener,noreferrer');
                             }
                         }}
                         style={{
@@ -702,7 +702,7 @@ function ChessGame({ user, onLogout }) {
                             cursor: 'pointer',
                             whiteSpace: 'nowrap',
                             transition: 'background 0.2s',
-                            color: item.label === 'Play' ? '#10b981' : '#b0b0b0'
+                            color: '#b0b0b0'
                         }}
                         onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
                         onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
