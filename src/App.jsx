@@ -134,7 +134,23 @@ function AuthScreen({ onAuthSuccess }) {
     return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI' }}>
             <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '320px', border: '1px solid #333' }}>
-                <h2 style={{ textAlign: 'center', color: '#38bdf8' }}>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
+                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px' }}>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
+
+                {/* --- NEW VOLUME NOTICE --- */}
+                <div style={{
+                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                    color: '#fbbf24',
+                    padding: '12px',
+                    borderRadius: '6px',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    fontSize: '13px',
+                    marginBottom: '20px',
+                    lineHeight: '1.4',
+                    textAlign: 'center'
+                }}>
+                    Currently due to volumes we are encountering issues with new user signups. We are working on resolving this. Please wait 24 hours.
+                </div>
+
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                     <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
                     <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
