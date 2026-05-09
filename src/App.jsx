@@ -148,7 +148,7 @@ function AuthScreen({ onAuthSuccess }) {
                     lineHeight: '1.4',
                     textAlign: 'center'
                 }}>
-                    Currently due to volumes we are encountering issues with new user signups. We are working on resolving this. Please wait 24 hours.
+                    Signup for free and play chess for free.
                 </div>
 
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
