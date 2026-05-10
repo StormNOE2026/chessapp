@@ -181,6 +181,10 @@ function ChessGame({ user, onLogout }) {
     const [isPlayingComputer, setIsPlayingComputer] = useState(false);
     const [challengeTime, setChallengeTime] = useState(600);
 
+    // Wager State
+    const [wagerAmount, setWagerAmount] = useState(0);
+    const [currentStake, setCurrentStake] = useState(0);
+
     const [explosion, setExplosion] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState([]);
     const [allMembers, setAllMembers] = useState([]);
@@ -213,7 +217,8 @@ function ChessGame({ user, onLogout }) {
     const timerRef = useRef(null);
     const mySocketId = useRef(Math.random().toString(36).substring(7));
 
-    const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100 });
+    // Stats including Balance
+    const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0 });
 
     const [isGameOverManually, setIsGameOverManually] = useState(false);
 
@@ -278,8 +283,26 @@ function ChessGame({ user, onLogout }) {
                 wins: data.wins || 0,
                 losses: data.losses || 0,
                 draws: data.draws || 0,
-                score: data.score !== undefined ? data.score : 100
+                score: data.score !== undefined ? data.score : 100,
+                balance: data.balance || 0
             });
+        }
+    };
+
+    const handleAddFunds = async () => {
+        const amountStr = prompt("Enter amount to deposit ($):", "10.00");
+        if (!amountStr) return;
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) return;
+
+        const newBalance = (stats.balance || 0) + amount;
+        const { error } = await supabase.from('profiles').update({ balance: newBalance }).eq('id', user.id);
+
+        if (!error) {
+            setStats(prev => ({ ...prev, balance: newBalance }));
+            alert(`Successfully added $${amount.toFixed(2)}`);
+        } else {
+            alert("Failed to add funds.");
         }
     };
 
@@ -341,9 +364,7 @@ function ChessGame({ user, onLogout }) {
         if (gunshotEnabledRef.current) {
             new Audio('/shotgun.mp3').play().catch(() => { });
         }
-        // Save the location and color for a wide blast explosion
         setExplosion({ square, color: capturedColor });
-        // Give 1 full second for the scatter animation to finish before removing
         setTimeout(() => setExplosion(null), 1000);
     };
 
@@ -353,21 +374,32 @@ function ChessGame({ user, onLogout }) {
         const updates = { ...currentStats };
 
         if (updates.score === undefined) updates.score = 100;
+        if (updates.balance === undefined) updates.balance = 0;
 
         if (type === 'win') {
             updates.wins += 1;
             updates.score += 8;
+            updates.balance += currentStake;
         }
         if (type === 'loss') {
             updates.losses += 1;
             updates.score -= 8;
+            updates.balance -= currentStake;
         }
         if (type === 'draw') {
             updates.draws += 1;
         }
 
-        await supabase.from('profiles').update(updates).eq('id', user.id);
+        await supabase.from('profiles').update({
+            wins: updates.wins,
+            losses: updates.losses,
+            draws: updates.draws,
+            score: updates.score,
+            balance: updates.balance
+        }).eq('id', user.id);
+
         setStats(updates);
+        setCurrentStake(0); // Reset stake after game
     };
 
     const resetMatch = (timeControl = 300) => {
@@ -394,16 +426,23 @@ function ChessGame({ user, onLogout }) {
                 setOnlineUsers(activePresences);
             })
             .on('broadcast', { event: 'challenge' }, ({ payload }) => {
-                if (payload.targetEmail === userEmail) setIncomingChallenge({ email: payload.challengerEmail, timeControl: payload.timeControl });
+                if (payload.targetEmail === userEmail) {
+                    setIncomingChallenge({
+                        email: payload.challengerEmail,
+                        timeControl: payload.timeControl,
+                        wagerAmount: payload.wagerAmount || 0
+                    });
+                }
             })
             .on('broadcast', { event: 'accept' }, ({ payload }) => {
                 if (payload.challengerEmail === userEmail) {
                     setOpponent(payload.targetEmail);
                     setIsPlayingComputer(false);
                     setPlayerColor('w');
+                    setCurrentStake(payload.wagerAmount || 0);
                     resetMatch(payload.timeControl);
 
-                    setStatus("Game started");
+                    setStatus(`Game started! Stake: $${payload.wagerAmount || 0}`);
                     speak("Game started");
                 }
             })
@@ -575,20 +614,44 @@ function ChessGame({ user, onLogout }) {
     };
 
     const handleSendChallenge = async (targetEmail) => {
+        if (wagerAmount > stats.balance) {
+            alert("Insufficient funds to make this wager!");
+            return;
+        }
         if (!lobbyChannel) return;
-        setStatus(`Challenge sent...`);
-        await lobbyChannel.send({ type: 'broadcast', event: 'challenge', payload: { challengerEmail: userEmail, targetEmail, timeControl: challengeTime } });
+        setStatus(`Challenge sent for $${wagerAmount}...`);
+        await lobbyChannel.send({
+            type: 'broadcast',
+            event: 'challenge',
+            payload: { challengerEmail: userEmail, targetEmail, timeControl: challengeTime, wagerAmount }
+        });
     };
 
     const handleAcceptChallenge = async () => {
         if (!lobbyChannel || !incomingChallenge) return;
-        await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge.email, targetEmail: userEmail, timeControl: incomingChallenge.timeControl } });
+        if (stats.balance < incomingChallenge.wagerAmount) {
+            alert("Insufficient funds to accept this wager!");
+            return;
+        }
+
+        await lobbyChannel.send({
+            type: 'broadcast',
+            event: 'accept',
+            payload: {
+                challengerEmail: incomingChallenge.email,
+                targetEmail: userEmail,
+                timeControl: incomingChallenge.timeControl,
+                wagerAmount: incomingChallenge.wagerAmount
+            }
+        });
+
         setOpponent(incomingChallenge.email);
         setIsPlayingComputer(false);
         setPlayerColor('b');
+        setCurrentStake(incomingChallenge.wagerAmount);
         resetMatch(incomingChallenge.timeControl);
 
-        setStatus("Game started");
+        setStatus(`Game started! Stake: $${incomingChallenge.wagerAmount}`);
         speak("Game started");
 
         setIncomingChallenge(null);
@@ -717,7 +780,6 @@ function ChessGame({ user, onLogout }) {
                 <div key={square} onClick={() => onSquareClick(square)} style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? '#f6f669' : ((row + col) % 2 === 0 ? '#5c7fb8' : '#ffffff') }}>
                     {piece && <img src={pieceImages[piece.color === 'w' ? piece.type.toUpperCase() : piece.type.toLowerCase()]} alt="" style={{ width: '90%', pointerEvents: 'none' }} />}
 
-                    {/* Wide Shattered Explosion Animation - NOW RED AND LARGER */}
                     {explosion?.square === square && (
                         <div style={{ position: 'absolute', top: '50%', left: '50%', width: 0, height: 0, zIndex: 999 }}>
                             {[...Array(40)].map((_, idx) => {
@@ -726,15 +788,15 @@ function ChessGame({ user, onLogout }) {
                                 const tx = `${Math.cos(angle) * dist}px`;
                                 const ty = `${Math.sin(angle) * dist}px`;
                                 const rot = `${(Math.random() - 0.5) * 720}deg`;
-                                const size = 10 + Math.random() * 15; // Sizes increased to be between 10px and 25px
-                                const bg = 'red'; // Changed color to red
+                                const size = 10 + Math.random() * 15;
+                                const bg = 'red';
                                 return (
                                     <div key={idx} style={{
                                         position: 'absolute',
                                         width: `${size}px`,
                                         height: `${size}px`,
                                         backgroundColor: bg,
-                                        border: '1px solid #8b0000', // Adjusted border to a dark red for contrast
+                                        border: '1px solid #8b0000',
                                         borderRadius: Math.random() > 0.5 ? '50%' : '2px',
                                         top: `-${size / 2}px`,
                                         left: `-${size / 2}px`,
@@ -761,7 +823,6 @@ function ChessGame({ user, onLogout }) {
 
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
-            {/* CSS Animation Keyframes for Shattering */}
             <style>
                 {`
                 @keyframes shatterPiece {
@@ -772,7 +833,6 @@ function ChessGame({ user, onLogout }) {
                 `}
             </style>
 
-            {/* 1. FIXED LEFT SIDEBAR */}
             <nav
                 onMouseEnter={() => setIsSidebarHovered(true)}
                 onMouseLeave={() => setIsSidebarHovered(false)}
@@ -829,24 +889,24 @@ function ChessGame({ user, onLogout }) {
                 ))}
             </nav>
 
-            {/* 2. MAIN CONTENT COLUMN */}
             <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, height: '100vh', overflow: 'hidden' }}>
 
-                {/* --- ALWAYS VISIBLE HEADER --- */}
                 <header style={{ height: '60px', flexShrink: 0, backgroundColor: '#1e1e1e', borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                         <h2 style={{ color: '#38bdf8', margin: 0, fontSize: '20px' }}>ChessOnline</h2>
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                        <span style={{ fontSize: '14px', color: '#10b981', fontWeight: 'bold' }}>
+                            Balance: ${stats.balance?.toFixed(2) || '0.00'}
+                        </span>
+                        <button onClick={handleAddFunds} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>Add Funds</button>
                         <span style={{ fontSize: '14px', whiteSpace: 'nowrap' }}>Logged in: <b style={{ color: '#38bdf8' }}>{userEmail}</b></span>
                         <button onClick={onLogout} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>Logout</button>
                     </div>
                 </header>
 
-                {/* --- SCROLLABLE MAIN AREA --- */}
                 <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexGrow: 1, padding: isMobile ? '10px' : '20px', gap: '20px', overflowX: 'hidden', overflowY: 'auto', justifyContent: isMobile ? 'flex-start' : 'center', alignItems: isMobile ? 'stretch' : 'flex-start' }}>
 
-                    {/* Column 1: Community Chat (TOGGLEABLE) */}
                     {showCommunityChat && (
                         <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '300px' : 'auto', margin: isMobile ? '0 auto' : '0' }}>
                             <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
@@ -867,15 +927,16 @@ function ChessGame({ user, onLogout }) {
                         </div>
                     )}
 
-                    {/* Column 2: Chess Board (CENTER) */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '560px', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
+
                         {incomingChallenge && (
                             <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
-                                <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)})</span>
+                                <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)}) for 💰 ${incomingChallenge.wagerAmount}</span>
                                 <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
                                 <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
                             </div>
                         )}
+
                         {incomingDrawOffer && (
                             <div style={{ backgroundColor: '#38bdf8', padding: '10px', borderRadius: '8px', marginBottom: '10px', color: '#000', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
                                 <span>🤝 Opponent offered a Draw!</span>
@@ -895,7 +956,6 @@ function ChessGame({ user, onLogout }) {
                         </div>
                     </div>
 
-                    {/* Column 3: Menus & Game Chat */}
                     <aside style={{ width: '100%', maxWidth: isMobile ? '100%' : '300px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
 
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
@@ -922,13 +982,26 @@ function ChessGame({ user, onLogout }) {
 
                             <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 {viewMode === 'online' && (
-                                    <div style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>TIME:</span>
-                                        <select value={challengeTime} onChange={(e) => setChallengeTime(Number(e.target.value))} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: 'pointer' }}>
-                                            <option value={600}>10 Mins</option>
-                                            <option value={86400}>1 Day</option>
-                                            <option value={259200}>3 Days</option>
-                                        </select>
+                                    <div style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+                                        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>TIME:</span>
+                                            <select value={challengeTime} onChange={(e) => setChallengeTime(Number(e.target.value))} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: 'pointer' }}>
+                                                <option value={600}>10 Mins</option>
+                                                <option value={86400}>1 Day</option>
+                                                <option value={259200}>3 Days</option>
+                                            </select>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
+                                            <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>WAGER:</span>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max={stats.balance || 0}
+                                                value={wagerAmount}
+                                                onChange={(e) => setWagerAmount(Number(e.target.value))}
+                                                style={{ width: '60px', backgroundColor: '#333', color: '#10b981', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none' }}
+                                            />
+                                        </div>
                                     </div>
                                 )}
 
@@ -1029,7 +1102,6 @@ function ChessGame({ user, onLogout }) {
                         </div>
                     </aside>
 
-                    {/* Column 4: Travel Ads */}
                     <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '220px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto', margin: isMobile ? '0 auto' : '0' }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                             ✈️ TRAVEL DEALS (50)
@@ -1049,7 +1121,6 @@ function ChessGame({ user, onLogout }) {
 
                 </div>
 
-                {/* --- ALWAYS VISIBLE FOOTER --- */}
                 <footer style={{
                     display: 'flex',
                     flexDirection: isMobile ? 'column' : 'row',
