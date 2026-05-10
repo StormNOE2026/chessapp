@@ -11,11 +11,9 @@ const sounds = {
     capture: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Capture.mp3',
     check: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Check.mp3',
     castle: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Move.mp3',
-    // ⚡ Using a direct web URL so it works immediately without local files
     thunder: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_7845f4fae2.mp3',
 };
 
-// --- Helper for Text-to-Speech ---
 const speak = (text) => {
     if ('speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(text);
@@ -215,7 +213,6 @@ function ChessGame({ user, onLogout }) {
     const timerRef = useRef(null);
     const mySocketId = useRef(Math.random().toString(36).substring(7));
 
-    // UPDATED: Added score to stats state
     const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100 });
 
     const [isGameOverManually, setIsGameOverManually] = useState(false);
@@ -274,7 +271,6 @@ function ChessGame({ user, onLogout }) {
         }
     }, [communityMessages, showCommunityChat]);
 
-    // UPDATED: Fetches the score safely and falls back to 100
     const fetchUserStats = async () => {
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (data) {
@@ -349,7 +345,6 @@ function ChessGame({ user, onLogout }) {
         setTimeout(() => setExplosionSquare(null), 600);
     };
 
-    // UPDATED: Modifies the score alongside wins and losses
     const recordResult = async (type) => {
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         const currentStats = data || stats;
@@ -807,11 +802,12 @@ function ChessGame({ user, onLogout }) {
                 </header>
 
                 {/* --- SCROLLABLE MAIN AREA --- */}
-                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexGrow: 1, padding: isMobile ? '10px' : '20px', gap: '20px', overflowX: 'hidden', overflowY: 'auto', justifyContent: 'center', alignItems: isMobile ? 'center' : 'stretch' }}>
+                {/* FIX: Removed 'alignItems: center' on mobile to let elements dictate their own full widths naturally. */}
+                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexGrow: 1, padding: isMobile ? '10px' : '20px', gap: '20px', overflowX: 'hidden', overflowY: 'auto', justifyContent: 'center' }}>
 
                     {/* Column 1: Community Chat (TOGGLEABLE) */}
                     {showCommunityChat && (
-                        <div style={{ width: isMobile ? '100%' : '250px', minWidth: '250px', maxWidth: '400px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '300px' : 'auto' }}>
+                        <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '300px' : 'auto' }}>
                             <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                                 🌍 COMMUNITY CHAT
                             </div>
@@ -831,43 +827,45 @@ function ChessGame({ user, onLogout }) {
                     )}
 
                     {/* Column 2: Chess Board (CENTER) */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexGrow: 1, overflowY: 'visible', width: '100%', maxWidth: '560px' }}>
+                    {/* FIX: Added flexShrink: 0 so the board wrapper isn't crushed to 0 height in mobile view */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '560px', flexShrink: 0 }}>
                         {incomingChallenge && (
-                            <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+                            <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
                                 <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)})</span>
                                 <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
                                 <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
                             </div>
                         )}
                         {incomingDrawOffer && (
-                            <div style={{ backgroundColor: '#38bdf8', padding: '10px', borderRadius: '8px', marginBottom: '10px', color: '#000', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
+                            <div style={{ backgroundColor: '#38bdf8', padding: '10px', borderRadius: '8px', marginBottom: '10px', color: '#000', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
                                 <span>🤝 Opponent offered a Draw!</span>
                                 <button onClick={acceptDraw} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
                                 <button onClick={handleDeclineDraw} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
                             </div>
                         )}
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: '560px', marginBottom: '10px', fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px', fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold' }}>
                             <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'w' ? '#38bdf8' : '#333' }}>⬜ {formatTime(whiteTime)}</div>
                             <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'b' ? '#38bdf8' : '#333' }}>⬛ {formatTime(blackTime)}</div>
                         </div>
                         <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{status}</div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', flexShrink: 0, width: '100%', maxWidth: '560px', aspectRatio: '1 / 1' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', width: '100%', aspectRatio: '1 / 1' }}>
                             {board}
                         </div>
                     </div>
 
                     {/* Column 3: Menus & Game Chat */}
-                    {/* FIXED MOBILE DISTORTION: added boxSizing, removed paddingRight on mobile, added flexWrap inside stats box */}
-                    <aside style={{ width: isMobile ? '100%' : '300px', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box' }}>
+                    {/* FIX: Applied flexShrink: 0 and boxSizing: border-box. Removed absolute paddingRight on mobile. */}
+                    <aside style={{ width: '100%', maxWidth: isMobile ? '100%' : '300px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box', flexShrink: 0 }}>
 
+                        {/* FIX: Uses CSS Grid to strictly split the 4 items evenly so they NEVER wrap or cut off on small screens */}
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-around', fontWeight: 'bold', textAlign: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                                <div style={{ flex: '1 1 auto', minWidth: '50px' }}><div style={{ color: '#38bdf8', fontSize: '10px' }}>SCORE</div><div style={{ fontSize: '18px' }}>{stats.score}</div></div>
-                                <div style={{ flex: '1 1 auto', minWidth: '50px' }}><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '18px' }}>{stats.wins}</div></div>
-                                <div style={{ flex: '1 1 auto', minWidth: '50px' }}><div style={{ color: '#ef4444', fontSize: '10px' }}>LOSS</div><div style={{ fontSize: '18px' }}>{stats.losses}</div></div>
-                                <div style={{ flex: '1 1 auto', minWidth: '50px' }}><div style={{ color: '#aaa', fontSize: '10px' }}>DRAW</div><div style={{ fontSize: '18px' }}>{stats.draws}</div></div>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px', textAlign: 'center', fontWeight: 'bold' }}>
+                                <div><div style={{ color: '#38bdf8', fontSize: '10px' }}>SCORE</div><div style={{ fontSize: '16px' }}>{stats.score}</div></div>
+                                <div><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '16px' }}>{stats.wins}</div></div>
+                                <div><div style={{ color: '#ef4444', fontSize: '10px' }}>LOSS</div><div style={{ fontSize: '16px' }}>{stats.losses}</div></div>
+                                <div><div style={{ color: '#aaa', fontSize: '10px' }}>DRAW</div><div style={{ fontSize: '16px' }}>{stats.draws}</div></div>
                             </div>
                         </div>
 
@@ -973,7 +971,7 @@ function ChessGame({ user, onLogout }) {
                             {speakChatEnabled ? 'Turn off Chat Speak' : 'Turn on Chat Speak'}
                         </button>
 
-                        <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: '150px' }}>
+                        <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: '150px', flexShrink: 0 }}>
                             <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#aaa' }}>HISTORY</h4>
                             <div style={{ overflowY: 'auto', flexGrow: 1, fontSize: '12px' }}>
                                 {formattedHistory.map((row, i) => (
@@ -994,7 +992,7 @@ function ChessGame({ user, onLogout }) {
                     </aside>
 
                     {/* Column 4: Travel Ads */}
-                    <div style={{ width: isMobile ? '100%' : '220px', maxWidth: '400px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto' }}>
+                    <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '220px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto' }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                             ✈️ TRAVEL DEALS (50)
                         </div>
