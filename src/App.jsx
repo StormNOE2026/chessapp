@@ -181,7 +181,7 @@ function ChessGame({ user, onLogout }) {
     const [isPlayingComputer, setIsPlayingComputer] = useState(false);
     const [challengeTime, setChallengeTime] = useState(600);
 
-    const [explosionSquare, setExplosionSquare] = useState(null);
+    const [explosion, setExplosion] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState([]);
     const [allMembers, setAllMembers] = useState([]);
     const [tvGames, setTvGames] = useState([]);
@@ -337,12 +337,14 @@ function ChessGame({ user, onLogout }) {
         new Audio(audioUrl).play().catch(() => { });
     };
 
-    const triggerCaptureEffects = (square) => {
+    const triggerCaptureEffects = (square, capturedColor) => {
         if (gunshotEnabledRef.current) {
             new Audio('/shotgun.mp3').play().catch(() => { });
         }
-        setExplosionSquare(square);
-        setTimeout(() => setExplosionSquare(null), 600);
+        // Save the location and color for a wide blast explosion
+        setExplosion({ square, color: capturedColor });
+        // Give 1 full second for the scatter animation to finish before removing
+        setTimeout(() => setExplosion(null), 1000);
     };
 
     const recordResult = async (type) => {
@@ -413,7 +415,7 @@ function ChessGame({ user, onLogout }) {
                     const moveResult = gameRef.current.move(payload.moveSan);
                     if (moveResult) {
                         playMoveSound(moveResult, gameRef.current);
-                        if (payload.captured) triggerCaptureEffects(payload.to);
+                        if (moveResult.captured) triggerCaptureEffects(payload.to, moveResult.color === 'w' ? 'b' : 'w');
                         setMoveHistory(prev => {
                             const next = [...prev, payload.moveSan];
                             setCurrentMoveIndex(next.length);
@@ -661,7 +663,7 @@ function ChessGame({ user, onLogout }) {
             const move = gameRef.current.move({ from: moveFrom, to: square, promotion: 'q' });
             if (move) {
                 playMoveSound(move, gameRef.current);
-                if (move.captured) triggerCaptureEffects(square);
+                if (move.captured) triggerCaptureEffects(square, move.color === 'w' ? 'b' : 'w');
                 const nextHistory = [...moveHistory, move.san];
                 setMoveHistory(nextHistory);
                 setCurrentMoveIndex(nextHistory.length);
@@ -683,7 +685,7 @@ function ChessGame({ user, onLogout }) {
                 const moveData = gameRef.current.move(bestMove);
                 if (moveData) {
                     playMoveSound(moveData, gameRef.current);
-                    if (moveData.captured) triggerCaptureEffects(moveData.to);
+                    if (moveData.captured) triggerCaptureEffects(moveData.to, moveData.color === 'w' ? 'b' : 'w');
                     setMoveHistory(prev => [...prev, bestMove]);
                     setCurrentMoveIndex(prev => prev + 1);
                 }
@@ -714,7 +716,37 @@ function ChessGame({ user, onLogout }) {
             board.push(
                 <div key={square} onClick={() => onSquareClick(square)} style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? '#f6f669' : ((row + col) % 2 === 0 ? '#5c7fb8' : '#ffffff') }}>
                     {piece && <img src={pieceImages[piece.color === 'w' ? piece.type.toUpperCase() : piece.type.toLowerCase()]} alt="" style={{ width: '90%', pointerEvents: 'none' }} />}
-                    {explosionSquare === square && <div className="star-wars-blast"></div>}
+
+                    {/* Wide Shattered Explosion Animation - NOW RED AND LARGER */}
+                    {explosion?.square === square && (
+                        <div style={{ position: 'absolute', top: '50%', left: '50%', width: 0, height: 0, zIndex: 999 }}>
+                            {[...Array(40)].map((_, idx) => {
+                                const angle = Math.random() * Math.PI * 2;
+                                const dist = 50 + Math.random() * 350;
+                                const tx = `${Math.cos(angle) * dist}px`;
+                                const ty = `${Math.sin(angle) * dist}px`;
+                                const rot = `${(Math.random() - 0.5) * 720}deg`;
+                                const size = 10 + Math.random() * 15; // Sizes increased to be between 10px and 25px
+                                const bg = 'red'; // Changed color to red
+                                return (
+                                    <div key={idx} style={{
+                                        position: 'absolute',
+                                        width: `${size}px`,
+                                        height: `${size}px`,
+                                        backgroundColor: bg,
+                                        border: '1px solid #8b0000', // Adjusted border to a dark red for contrast
+                                        borderRadius: Math.random() > 0.5 ? '50%' : '2px',
+                                        top: `-${size / 2}px`,
+                                        left: `-${size / 2}px`,
+                                        animation: 'shatterPiece 1s cubic-bezier(0.15, 0.9, 0.3, 1) forwards',
+                                        '--tx': tx,
+                                        '--ty': ty,
+                                        '--rot': rot
+                                    }} />
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             );
         });
@@ -729,6 +761,16 @@ function ChessGame({ user, onLogout }) {
 
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
+            {/* CSS Animation Keyframes for Shattering */}
+            <style>
+                {`
+                @keyframes shatterPiece {
+                    0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; }
+                    70% { opacity: 0.8; }
+                    100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; }
+                }
+                `}
+            </style>
 
             {/* 1. FIXED LEFT SIDEBAR */}
             <nav
@@ -802,7 +844,6 @@ function ChessGame({ user, onLogout }) {
                 </header>
 
                 {/* --- SCROLLABLE MAIN AREA --- */}
-                {/* FIX: Changed justifyContent to flex-start on mobile. When it was 'center', long columns were pushed completely off the top edge of the mobile screen where you couldn't scroll to see them. */}
                 <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexGrow: 1, padding: isMobile ? '10px' : '20px', gap: '20px', overflowX: 'hidden', overflowY: 'auto', justifyContent: isMobile ? 'flex-start' : 'center', alignItems: isMobile ? 'stretch' : 'flex-start' }}>
 
                     {/* Column 1: Community Chat (TOGGLEABLE) */}
@@ -827,7 +868,6 @@ function ChessGame({ user, onLogout }) {
                     )}
 
                     {/* Column 2: Chess Board (CENTER) */}
-                    {/* FIX: Added margin auto and explicit 100% width so the flex child properly expands instead of shrinking to 0 width. */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '560px', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
                         {incomingChallenge && (
                             <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
@@ -850,7 +890,6 @@ function ChessGame({ user, onLogout }) {
                         </div>
                         <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{status}</div>
 
-                        {/* FIX: Simplified the grid container to naturally size the board based on available width without causing aspect-ratio conflicts */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', width: '100%', maxWidth: '100%' }}>
                             {board}
                         </div>
@@ -859,7 +898,6 @@ function ChessGame({ user, onLogout }) {
                     {/* Column 3: Menus & Game Chat */}
                     <aside style={{ width: '100%', maxWidth: isMobile ? '100%' : '300px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
 
-                        {/* FIX: Transformed into a perfectly scaled, non-breaking Flex block for the stats. */}
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', textAlign: 'center', width: '100%' }}>
                                 <div style={{ flex: 1 }}><div style={{ color: '#38bdf8', fontSize: '10px' }}>SCORE</div><div style={{ fontSize: '16px' }}>{stats.score}</div></div>
