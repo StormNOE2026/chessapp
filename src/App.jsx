@@ -802,12 +802,12 @@ function ChessGame({ user, onLogout }) {
                 </header>
 
                 {/* --- SCROLLABLE MAIN AREA --- */}
-                {/* FIX: Removed 'alignItems: center' on mobile to let elements dictate their own full widths naturally. */}
-                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexGrow: 1, padding: isMobile ? '10px' : '20px', gap: '20px', overflowX: 'hidden', overflowY: 'auto', justifyContent: 'center' }}>
+                {/* FIX: Changed justifyContent to flex-start on mobile. When it was 'center', long columns were pushed completely off the top edge of the mobile screen where you couldn't scroll to see them. */}
+                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexGrow: 1, padding: isMobile ? '10px' : '20px', gap: '20px', overflowX: 'hidden', overflowY: 'auto', justifyContent: isMobile ? 'flex-start' : 'center', alignItems: isMobile ? 'stretch' : 'flex-start' }}>
 
                     {/* Column 1: Community Chat (TOGGLEABLE) */}
                     {showCommunityChat && (
-                        <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '300px' : 'auto' }}>
+                        <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '300px' : 'auto', margin: isMobile ? '0 auto' : '0' }}>
                             <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                                 🌍 COMMUNITY CHAT
                             </div>
@@ -827,8 +827,8 @@ function ChessGame({ user, onLogout }) {
                     )}
 
                     {/* Column 2: Chess Board (CENTER) */}
-                    {/* FIX: Added flexShrink: 0 so the board wrapper isn't crushed to 0 height in mobile view */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '560px', flexShrink: 0 }}>
+                    {/* FIX: Added margin auto and explicit 100% width so the flex child properly expands instead of shrinking to 0 width. */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '560px', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
                         {incomingChallenge && (
                             <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
                                 <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)})</span>
@@ -850,22 +850,22 @@ function ChessGame({ user, onLogout }) {
                         </div>
                         <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{status}</div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', width: '100%', aspectRatio: '1 / 1' }}>
+                        {/* FIX: Simplified the grid container to naturally size the board based on available width without causing aspect-ratio conflicts */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', width: '100%', maxWidth: '100%' }}>
                             {board}
                         </div>
                     </div>
 
                     {/* Column 3: Menus & Game Chat */}
-                    {/* FIX: Applied flexShrink: 0 and boxSizing: border-box. Removed absolute paddingRight on mobile. */}
-                    <aside style={{ width: '100%', maxWidth: isMobile ? '100%' : '300px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box', flexShrink: 0 }}>
+                    <aside style={{ width: '100%', maxWidth: isMobile ? '100%' : '300px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
 
-                        {/* FIX: Uses CSS Grid to strictly split the 4 items evenly so they NEVER wrap or cut off on small screens */}
+                        {/* FIX: Transformed into a perfectly scaled, non-breaking Flex block for the stats. */}
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '5px', textAlign: 'center', fontWeight: 'bold' }}>
-                                <div><div style={{ color: '#38bdf8', fontSize: '10px' }}>SCORE</div><div style={{ fontSize: '16px' }}>{stats.score}</div></div>
-                                <div><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '16px' }}>{stats.wins}</div></div>
-                                <div><div style={{ color: '#ef4444', fontSize: '10px' }}>LOSS</div><div style={{ fontSize: '16px' }}>{stats.losses}</div></div>
-                                <div><div style={{ color: '#aaa', fontSize: '10px' }}>DRAW</div><div style={{ fontSize: '16px' }}>{stats.draws}</div></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', textAlign: 'center', width: '100%' }}>
+                                <div style={{ flex: 1 }}><div style={{ color: '#38bdf8', fontSize: '10px' }}>SCORE</div><div style={{ fontSize: '16px' }}>{stats.score}</div></div>
+                                <div style={{ flex: 1 }}><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '16px' }}>{stats.wins}</div></div>
+                                <div style={{ flex: 1 }}><div style={{ color: '#ef4444', fontSize: '10px' }}>LOSS</div><div style={{ fontSize: '16px' }}>{stats.losses}</div></div>
+                                <div style={{ flex: 1 }}><div style={{ color: '#aaa', fontSize: '10px' }}>DRAW</div><div style={{ fontSize: '16px' }}>{stats.draws}</div></div>
                             </div>
                         </div>
 
@@ -992,7 +992,7 @@ function ChessGame({ user, onLogout }) {
                     </aside>
 
                     {/* Column 4: Travel Ads */}
-                    <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '220px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto' }}>
+                    <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '220px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto', margin: isMobile ? '0 auto' : '0' }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                             ✈️ TRAVEL DEALS (50)
                         </div>
