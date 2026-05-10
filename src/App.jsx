@@ -119,7 +119,6 @@ function AuthScreen({ onAuthSuccess }) {
         e.preventDefault();
         setLoading(true);
 
-        // CLEAN THE EMAIL INPUT HERE
         const cleanEmail = email.trim().toLowerCase();
 
         let { data, error } = isLogin
@@ -133,10 +132,10 @@ function AuthScreen({ onAuthSuccess }) {
 
     return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI' }}>
-            <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '320px', border: '1px solid #333' }}>
+            {/* UPDATED: Added width: '90%', maxWidth: '320px' for mobile fit */}
+            <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '90%', maxWidth: '320px', border: '1px solid #333' }}>
                 <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px' }}>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
 
-                {/* --- NEW VOLUME NOTICE --- */}
                 <div style={{
                     backgroundColor: 'rgba(245, 158, 11, 0.1)',
                     color: '#fbbf24',
@@ -169,6 +168,15 @@ function AuthScreen({ onAuthSuccess }) {
 // ==========================================
 function ChessGame({ user, onLogout }) {
     const userEmail = user.email;
+
+    // --- UPDATED: MOBILE STATE HOOK ---
+    const [isMobile, setIsMobile] = useState(window.innerWidth <= 800);
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth <= 800);
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
     const [moveHistory, setMoveHistory] = useState([]);
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [moveFrom, setMoveFrom] = useState('');
@@ -214,11 +222,11 @@ function ChessGame({ user, onLogout }) {
     const [gunshotEnabled, setGunshotEnabled] = useState(true);
     const gunshotEnabledRef = useRef(gunshotEnabled);
 
-    // --- NEW: Chat TTS State & Ref ---
+    // Chat TTS State & Ref
     const [speakChatEnabled, setSpeakChatEnabled] = useState(false);
     const speakChatEnabledRef = useRef(speakChatEnabled);
 
-    // --- SIDEBAR STATE ---
+    // Sidebar State
     const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
     useEffect(() => {
@@ -259,7 +267,6 @@ function ChessGame({ user, onLogout }) {
 
     useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
 
-    // Auto-scroll community chat when it updates or becomes visible
     useEffect(() => {
         if (showCommunityChat) {
             communityEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -278,7 +285,7 @@ function ChessGame({ user, onLogout }) {
 
     const fetchCommunityComments = async () => {
         let { data } = await supabase.from('comments').select('*').order('created_at', { ascending: false }).limit(50);
-        if (data) setCommunityMessages(data.reverse()); // Reverse so newest are at the bottom
+        if (data) setCommunityMessages(data.reverse());
     };
 
     const fetchTvGames = async () => {
@@ -356,7 +363,6 @@ function ChessGame({ user, onLogout }) {
         setChatMessages([]);
     };
 
-    // --- 🌐 REALTIME BROADCAST HANDLER ---
     useEffect(() => {
         const channel = supabase.channel('chess-lobby');
         setLobbyChannel(channel);
@@ -402,7 +408,6 @@ function ChessGame({ user, onLogout }) {
             .on('broadcast', { event: 'chat' }, ({ payload }) => {
                 if (payload.targetEmail === userEmail && payload.senderEmail === opponentRef.current) {
                     setChatMessages(prev => [...prev, { text: payload.text, sender: payload.senderEmail }]);
-                    // --- NEW: Speak incoming chat messages if enabled ---
                     if (speakChatEnabledRef.current) {
                         speak(payload.text);
                     }
@@ -439,11 +444,9 @@ function ChessGame({ user, onLogout }) {
                 });
             });
 
-        // Postgres subscription for the 'comments' table
         const commentsSub = supabase.channel('custom-all-comments')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
                 setCommunityMessages(prev => {
-                    // Prevent duplicates in case the Realtime event fires twice
                     if (prev.find(m => m.id === payload.new.id)) return prev;
                     return [...prev, payload.new];
                 });
@@ -456,7 +459,6 @@ function ChessGame({ user, onLogout }) {
         };
     }, [userEmail, isGameOverManually]);
 
-    // --- Update Presence Status dynamically when game starts/ends ---
     useEffect(() => {
         if (lobbyChannel) {
             lobbyChannel.track({
@@ -467,7 +469,6 @@ function ChessGame({ user, onLogout }) {
         }
     }, [opponent, isPlayingComputer, lobbyChannel, userEmail]);
 
-    // --- Timer Logic ---
     useEffect(() => {
         if (displayGame.isGameOver() || isGameOverManually || currentMoveIndex < moveHistory.length || (!opponent && !isPlayingComputer)) {
             clearInterval(timerRef.current);
@@ -480,7 +481,6 @@ function ChessGame({ user, onLogout }) {
         return () => clearInterval(timerRef.current);
     }, [moveHistory, currentMoveIndex, isGameOverManually, opponent, isPlayingComputer]);
 
-    // Check for Timeout
     useEffect(() => {
         if (!isGameOverManually && (whiteTime === 0 || blackTime === 0)) {
             setIsGameOverManually(true);
@@ -503,12 +503,10 @@ function ChessGame({ user, onLogout }) {
                 setIsGameOverManually(true);
                 speak(msg);
 
-                // ⚡ THUNDER SOUND EXECUTED HERE ⚡
                 new Audio(sounds.thunder).play().catch((err) => console.error("Thunder sound failed to play:", err));
 
-                // 🔫 NEW: FIRE THREE SHOTS 🔫
                 if (gunshotEnabledRef.current) {
-                    const delayBetweenShots = 400; // Adjust this in milliseconds to change the speed of the shots
+                    const delayBetweenShots = 400;
                     for (let i = 0; i < 3; i++) {
                         setTimeout(() => {
                             new Audio('/shotgun.mp3').play().catch(() => { });
@@ -539,7 +537,6 @@ function ChessGame({ user, onLogout }) {
         }
     }, [moveHistory, playerColor, isGameOverManually, opponent, isPlayingComputer, status]);
 
-    // --- ACTIONS ---
     const sendChatMessage = async (e) => {
         e.preventDefault();
         if (!chatInput.trim() || !opponent) return;
@@ -553,14 +550,8 @@ function ChessGame({ user, onLogout }) {
         if (!communityInput.trim()) return;
 
         const newMsg = { text: communityInput, senderEmail: userEmail };
-
-        // ONLY clear the input field locally. 
-        // We let the Supabase Realtime Listener (in the useEffect) handle adding it to the screen 
-        // so it never renders twice.
         setCommunityInput('');
-
         const { error } = await supabase.from('comments').insert([newMsg]);
-
         if (error) console.error("Error sending community message:", error.message);
     };
 
@@ -591,7 +582,6 @@ function ChessGame({ user, onLogout }) {
         setIncomingChallenge(null);
     };
 
-    // --- NEW: Resign logic updated to handle computer matches ---
     const handleResign = () => {
         if (isGameOverManually || (!opponent && !isPlayingComputer)) return;
 
@@ -602,14 +592,12 @@ function ChessGame({ user, onLogout }) {
             speak(msg);
             recordResult('loss');
 
-            // Only send broadcast if playing a real opponent
             if (opponent) {
                 lobbyChannel.send({ type: 'broadcast', event: 'resign', payload: { targetEmail: opponentRef.current } });
             }
         }
     };
 
-    // --- NEW: Draw logic pulled out into function to handle computer matches ---
     const handleDrawOffer = () => {
         if (isGameOverManually || (!opponent && !isPlayingComputer)) return;
 
@@ -617,7 +605,6 @@ function ChessGame({ user, onLogout }) {
             lobbyChannel.send({ type: 'broadcast', event: 'drawOffer', payload: { targetEmail: opponent } });
             setStatus("Draw offer sent...");
         } else if (isPlayingComputer) {
-            // AI immediately accepts draw
             setIsGameOverManually(true);
             const msg = "Computer accepts the draw!";
             setStatus(msg);
@@ -671,7 +658,6 @@ function ChessGame({ user, onLogout }) {
         } catch (e) { setMoveFrom(''); }
     }
 
-    // AI Logic
     useEffect(() => {
         if (!isPlayingComputer || displayGame.isGameOver() || isGameOverManually || opponent || currentMoveIndex < moveHistory.length) return;
         if (displayGame.turn() === 'b') {
@@ -709,7 +695,8 @@ function ChessGame({ user, onLogout }) {
             const piece = displayGame.get(square);
             const isSelected = moveFrom === square;
             board.push(
-                <div key={square} onClick={() => onSquareClick(square)} style={{ position: 'relative', width: '70px', height: '70px', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? '#f6f669' : ((row + col) % 2 === 0 ? '#5c7fb8' : '#ffffff') }}>
+                // UPDATED: Changed width/height to 100% and aspectRatio
+                <div key={square} onClick={() => onSquareClick(square)} style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? '#f6f669' : ((row + col) % 2 === 0 ? '#5c7fb8' : '#ffffff') }}>
                     {piece && <img src={pieceImages[piece.color === 'w' ? piece.type.toUpperCase() : piece.type.toLowerCase()]} alt="" style={{ width: '90%', pointerEvents: 'none' }} />}
                     {explosionSquare === square && <div className="star-wars-blast"></div>}
                 </div>
@@ -724,9 +711,6 @@ function ChessGame({ user, onLogout }) {
         { icon: '👥', label: 'Community' }
     ];
 
-    // ==========================================
-    // 🧱 SECURE LAYOUT STRUCTURE
-    // ==========================================
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
 
@@ -801,12 +785,12 @@ function ChessGame({ user, onLogout }) {
                     </div>
                 </header>
 
-                {/* --- SCROLLABLE MAIN AREA --- */}
-                <div style={{ display: 'flex', flexGrow: 1, padding: '20px', gap: '30px', overflowX: 'auto', overflowY: 'hidden', justifyContent: 'center' }}>
+                {/* --- SCROLLABLE MAIN AREA (UPDATED FOR MOBILE) --- */}
+                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexGrow: 1, padding: isMobile ? '10px' : '20px', gap: '20px', overflowX: 'hidden', overflowY: 'auto', justifyContent: 'center', alignItems: isMobile ? 'center' : 'stretch' }}>
 
                     {/* Column 1: Community Chat (TOGGLEABLE) */}
                     {showCommunityChat && (
-                        <div style={{ width: '250px', minWidth: '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                        <div style={{ width: isMobile ? '100%' : '250px', minWidth: '250px', maxWidth: '400px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '300px' : 'auto' }}>
                             <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                                 🌍 COMMUNITY CHAT
                             </div>
@@ -818,43 +802,44 @@ function ChessGame({ user, onLogout }) {
                                 ))}
                                 <div ref={communityEndRef} />
                             </div>
-                            <form onSubmit={sendCommunityMessage} style={{ display: 'flex', borderTop: '1px solid #333', padding: '10px' }}>
+                            <form onSubmit={sendCommunityMessage} style={{ display: 'flex', borderTop: '1px solid #333', padding: '10px', flexShrink: 0 }}>
                                 <input id="community-input" type="text" value={communityInput} onChange={e => setCommunityInput(e.target.value)} placeholder="Say something..." style={{ flexGrow: 1, padding: '8px', backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px 0 0 4px', outline: 'none', fontSize: '11px', minWidth: 0 }} />
                                 <button type="submit" style={{ backgroundColor: '#f97316', border: 'none', color: 'white', padding: '0 10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '0 4px 4px 0', fontSize: '11px' }}>Send</button>
                             </form>
                         </div>
                     )}
 
-                    {/* Column 2: Chess Board (CENTER) */}
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexGrow: 1, overflowY: 'auto' }}>
+                    {/* Column 2: Chess Board (CENTER) (UPDATED FOR MOBILE) */}
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexGrow: 1, overflowY: 'visible', width: '100%', maxWidth: '560px' }}>
                         {incomingChallenge && (
-                            <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
                                 <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)})</span>
                                 <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
                                 <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
                             </div>
                         )}
                         {incomingDrawOffer && (
-                            <div style={{ backgroundColor: '#38bdf8', padding: '10px', borderRadius: '8px', marginBottom: '10px', color: '#000', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ backgroundColor: '#38bdf8', padding: '10px', borderRadius: '8px', marginBottom: '10px', color: '#000', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
                                 <span>🤝 Opponent offered a Draw!</span>
                                 <button onClick={acceptDraw} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
                                 <button onClick={handleDeclineDraw} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
                             </div>
                         )}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '560px', marginBottom: '10px', fontSize: '20px', fontWeight: 'bold' }}>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', maxWidth: '560px', marginBottom: '10px', fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold' }}>
                             <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'w' ? '#38bdf8' : '#333' }}>⬜ {formatTime(whiteTime)}</div>
                             <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'b' ? '#38bdf8' : '#333' }}>⬛ {formatTime(blackTime)}</div>
                         </div>
                         <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{status}</div>
 
-                        {/* Board wrapper ensures it always stays 560x560 inside the flexbox */}
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 70px)', border: '6px solid #2c2c2c', borderRadius: '4px', flexShrink: 0, width: '560px', height: '560px' }}>
+                        {/* Board wrapper scales automatically now */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', flexShrink: 0, width: '100%', maxWidth: '560px', aspectRatio: '1 / 1' }}>
                             {board}
                         </div>
                     </div>
 
-                    {/* Column 3: Menus & Game Chat (RIGHT OF BOARD) */}
-                    <aside style={{ width: '300px', minWidth: '300px', display: 'flex', flexDirection: 'column', gap: '15px', overflowY: 'auto', paddingRight: '5px' }}>
+                    {/* Column 3: Menus & Game Chat (UPDATED FOR MOBILE) */}
+                    <aside style={{ width: isMobile ? '100%' : '300px', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: '5px' }}>
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-around', fontWeight: 'bold', textAlign: 'center' }}>
                                 <div><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '18px' }}>{stats.wins}</div></div>
@@ -938,7 +923,6 @@ function ChessGame({ user, onLogout }) {
                             </form>
                         </div>
 
-                        {/* --- NEW: Draw and Resign Buttons updated for computer play --- */}
                         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
                             <button onClick={handleDrawOffer} disabled={(!opponent && !isPlayingComputer) || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>🤝 Draw</button>
                             <button onClick={handleResign} disabled={(!opponent && !isPlayingComputer) || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>🏳️ Resign</button>
@@ -959,7 +943,6 @@ function ChessGame({ user, onLogout }) {
                             {gunshotEnabled ? 'Turn off gunshot' : 'Turn on gunshot'}
                         </button>
 
-                        {/* --- NEW BUTTON: Chat TTS Toggle --- */}
                         <button
                             onClick={() => setSpeakChatEnabled(!speakChatEnabled)}
                             style={{ width: '100%', padding: '10px', backgroundColor: speakChatEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}
@@ -987,8 +970,9 @@ function ChessGame({ user, onLogout }) {
                         </div>
                     </aside>
 
-                    {/* Column 4: Travel Ads (FAR RIGHT) */}
-                    <div style={{ width: '220px', minWidth: '220px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
+                    {/* Column 4: Travel Ads (UPDATED FOR MOBILE) */}
+                    {/* Note: I kept the ads showing on mobile, but they will stack below everything else */}
+                    <div style={{ width: isMobile ? '100%' : '220px', maxWidth: '400px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto' }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                             ✈️ TRAVEL DEALS (50)
                         </div>
@@ -1010,9 +994,11 @@ function ChessGame({ user, onLogout }) {
                 {/* --- ALWAYS VISIBLE FOOTER --- */}
                 <footer style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    justifyContent: isMobile ? 'center' : 'space-between',
                     alignItems: 'center',
                     padding: '15px 30px',
+                    gap: isMobile ? '10px' : '0',
                     color: '#888',
                     fontSize: '14px',
                     borderTop: '1px solid #333',
@@ -1021,7 +1007,7 @@ function ChessGame({ user, onLogout }) {
                 }}>
                     <div>NoirSoft Creation {new Date().getFullYear()}</div>
 
-                    <div style={{ display: 'flex', gap: '25px', fontSize: '13px', fontWeight: 'bold' }}>
+                    <div style={{ display: 'flex', gap: '15px', fontSize: '13px', fontWeight: 'bold', flexWrap: 'wrap', justifyContent: 'center' }}>
                         <span style={{ color: '#aaa' }}>👥 Members: {allMembers.length}</span>
                         <span style={{ color: '#10b981' }}>🟢 Online: {onlineUsers.length}</span>
                         <span style={{ color: '#f97316' }}>⚔️ Playing: {onlineUsers.filter(u => u.isPlaying).length}</span>
