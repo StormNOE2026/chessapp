@@ -859,14 +859,15 @@ function ChessGame({ user, onLogout }) {
                     </div>
 
                     {/* Column 3: Menus & Game Chat */}
-                    <aside style={{ width: isMobile ? '100%' : '300px', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: '5px' }}>
-                        {/* UPDATED: Displays Score alongside Win/Loss/Draw */}
+                    {/* FIXED MOBILE DISTORTION: added boxSizing, removed paddingRight on mobile, added flexWrap inside stats box */}
+                    <aside style={{ width: isMobile ? '100%' : '300px', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box' }}>
+
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-around', fontWeight: 'bold', textAlign: 'center' }}>
-                                <div><div style={{ color: '#38bdf8', fontSize: '10px' }}>SCORE</div><div style={{ fontSize: '18px' }}>{stats.score}</div></div>
-                                <div><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '18px' }}>{stats.wins}</div></div>
-                                <div><div style={{ color: '#ef4444', fontSize: '10px' }}>LOSS</div><div style={{ fontSize: '18px' }}>{stats.losses}</div></div>
-                                <div><div style={{ color: '#aaa', fontSize: '10px' }}>DRAW</div><div style={{ fontSize: '18px' }}>{stats.draws}</div></div>
+                            <div style={{ display: 'flex', justifyContent: 'space-around', fontWeight: 'bold', textAlign: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                                <div style={{ flex: '1 1 auto', minWidth: '50px' }}><div style={{ color: '#38bdf8', fontSize: '10px' }}>SCORE</div><div style={{ fontSize: '18px' }}>{stats.score}</div></div>
+                                <div style={{ flex: '1 1 auto', minWidth: '50px' }}><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '18px' }}>{stats.wins}</div></div>
+                                <div style={{ flex: '1 1 auto', minWidth: '50px' }}><div style={{ color: '#ef4444', fontSize: '10px' }}>LOSS</div><div style={{ fontSize: '18px' }}>{stats.losses}</div></div>
+                                <div style={{ flex: '1 1 auto', minWidth: '50px' }}><div style={{ color: '#aaa', fontSize: '10px' }}>DRAW</div><div style={{ fontSize: '18px' }}>{stats.draws}</div></div>
                             </div>
                         </div>
 
