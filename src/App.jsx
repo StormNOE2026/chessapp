@@ -132,7 +132,6 @@ function AuthScreen({ onAuthSuccess }) {
 
     return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI' }}>
-            {/* UPDATED: Added width: '90%', maxWidth: '320px' for mobile fit */}
             <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '90%', maxWidth: '320px', border: '1px solid #333' }}>
                 <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px' }}>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
 
@@ -169,7 +168,6 @@ function AuthScreen({ onAuthSuccess }) {
 function ChessGame({ user, onLogout }) {
     const userEmail = user.email;
 
-    // --- UPDATED: MOBILE STATE HOOK ---
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 800);
     useEffect(() => {
         const handleResize = () => setIsMobile(window.innerWidth <= 800);
@@ -202,7 +200,7 @@ function ChessGame({ user, onLogout }) {
     const [chatInput, setChatInput] = useState('');
     const chatEndRef = useRef(null);
 
-    // Community Chat (Database bound & toggleable)
+    // Community Chat
     const [showCommunityChat, setShowCommunityChat] = useState(false);
     const [communityMessages, setCommunityMessages] = useState([]);
     const [communityInput, setCommunityInput] = useState('');
@@ -216,7 +214,10 @@ function ChessGame({ user, onLogout }) {
 
     const timerRef = useRef(null);
     const mySocketId = useRef(Math.random().toString(36).substring(7));
-    const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0 });
+
+    // UPDATED: Added score to stats state
+    const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100 });
+
     const [isGameOverManually, setIsGameOverManually] = useState(false);
 
     const [gunshotEnabled, setGunshotEnabled] = useState(true);
@@ -273,9 +274,17 @@ function ChessGame({ user, onLogout }) {
         }
     }, [communityMessages, showCommunityChat]);
 
+    // UPDATED: Fetches the score safely and falls back to 100
     const fetchUserStats = async () => {
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        if (data) setStats({ wins: data.wins, losses: data.losses, draws: data.draws });
+        if (data) {
+            setStats({
+                wins: data.wins || 0,
+                losses: data.losses || 0,
+                draws: data.draws || 0,
+                score: data.score !== undefined ? data.score : 100
+            });
+        }
     };
 
     const fetchAllMembers = async () => {
@@ -340,13 +349,26 @@ function ChessGame({ user, onLogout }) {
         setTimeout(() => setExplosionSquare(null), 600);
     };
 
+    // UPDATED: Modifies the score alongside wins and losses
     const recordResult = async (type) => {
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         const currentStats = data || stats;
         const updates = { ...currentStats };
-        if (type === 'win') updates.wins += 1;
-        if (type === 'loss') updates.losses += 1;
-        if (type === 'draw') updates.draws += 1;
+
+        if (updates.score === undefined) updates.score = 100;
+
+        if (type === 'win') {
+            updates.wins += 1;
+            updates.score += 8;
+        }
+        if (type === 'loss') {
+            updates.losses += 1;
+            updates.score -= 8;
+        }
+        if (type === 'draw') {
+            updates.draws += 1;
+        }
+
         await supabase.from('profiles').update(updates).eq('id', user.id);
         setStats(updates);
     };
@@ -695,7 +717,6 @@ function ChessGame({ user, onLogout }) {
             const piece = displayGame.get(square);
             const isSelected = moveFrom === square;
             board.push(
-                // UPDATED: Changed width/height to 100% and aspectRatio
                 <div key={square} onClick={() => onSquareClick(square)} style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? '#f6f669' : ((row + col) % 2 === 0 ? '#5c7fb8' : '#ffffff') }}>
                     {piece && <img src={pieceImages[piece.color === 'w' ? piece.type.toUpperCase() : piece.type.toLowerCase()]} alt="" style={{ width: '90%', pointerEvents: 'none' }} />}
                     {explosionSquare === square && <div className="star-wars-blast"></div>}
@@ -785,7 +806,7 @@ function ChessGame({ user, onLogout }) {
                     </div>
                 </header>
 
-                {/* --- SCROLLABLE MAIN AREA (UPDATED FOR MOBILE) --- */}
+                {/* --- SCROLLABLE MAIN AREA --- */}
                 <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexGrow: 1, padding: isMobile ? '10px' : '20px', gap: '20px', overflowX: 'hidden', overflowY: 'auto', justifyContent: 'center', alignItems: isMobile ? 'center' : 'stretch' }}>
 
                     {/* Column 1: Community Chat (TOGGLEABLE) */}
@@ -809,7 +830,7 @@ function ChessGame({ user, onLogout }) {
                         </div>
                     )}
 
-                    {/* Column 2: Chess Board (CENTER) (UPDATED FOR MOBILE) */}
+                    {/* Column 2: Chess Board (CENTER) */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexGrow: 1, overflowY: 'visible', width: '100%', maxWidth: '560px' }}>
                         {incomingChallenge && (
                             <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%' }}>
@@ -832,16 +853,17 @@ function ChessGame({ user, onLogout }) {
                         </div>
                         <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{status}</div>
 
-                        {/* Board wrapper scales automatically now */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', flexShrink: 0, width: '100%', maxWidth: '560px', aspectRatio: '1 / 1' }}>
                             {board}
                         </div>
                     </div>
 
-                    {/* Column 3: Menus & Game Chat (UPDATED FOR MOBILE) */}
+                    {/* Column 3: Menus & Game Chat */}
                     <aside style={{ width: isMobile ? '100%' : '300px', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: '5px' }}>
+                        {/* UPDATED: Displays Score alongside Win/Loss/Draw */}
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-around', fontWeight: 'bold', textAlign: 'center' }}>
+                                <div><div style={{ color: '#38bdf8', fontSize: '10px' }}>SCORE</div><div style={{ fontSize: '18px' }}>{stats.score}</div></div>
                                 <div><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '18px' }}>{stats.wins}</div></div>
                                 <div><div style={{ color: '#ef4444', fontSize: '10px' }}>LOSS</div><div style={{ fontSize: '18px' }}>{stats.losses}</div></div>
                                 <div><div style={{ color: '#aaa', fontSize: '10px' }}>DRAW</div><div style={{ fontSize: '18px' }}>{stats.draws}</div></div>
@@ -970,8 +992,7 @@ function ChessGame({ user, onLogout }) {
                         </div>
                     </aside>
 
-                    {/* Column 4: Travel Ads (UPDATED FOR MOBILE) */}
-                    {/* Note: I kept the ads showing on mobile, but they will stack below everything else */}
+                    {/* Column 4: Travel Ads */}
                     <div style={{ width: isMobile ? '100%' : '220px', maxWidth: '400px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto' }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                             ✈️ TRAVEL DEALS (50)
