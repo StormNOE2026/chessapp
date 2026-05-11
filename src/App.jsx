@@ -200,13 +200,13 @@ function ChessGame({ user, onLogout }) {
     // Game Chat
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
-    const chatEndRef = useRef(null);
+    const chatContainerRef = useRef(null); // Fix applied here
 
     // Community Chat
     const [showCommunityChat, setShowCommunityChat] = useState(false);
     const [communityMessages, setCommunityMessages] = useState([]);
     const [communityInput, setCommunityInput] = useState('');
-    const communityEndRef = useRef(null);
+    const communityContainerRef = useRef(null); // Fix applied here
 
     const [opponent, setOpponent] = useState(null);
     const [playerColor, setPlayerColor] = useState('w');
@@ -268,11 +268,17 @@ function ChessGame({ user, onLogout }) {
         fetchCommunityComments();
     }, []);
 
-    useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [chatMessages]);
-
+    // Scroll Game Chat to bottom safely
     useEffect(() => {
-        if (showCommunityChat) {
-            communityEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        if (chatContainerRef.current) {
+            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
+        }
+    }, [chatMessages]);
+
+    // Scroll Community Chat to bottom safely
+    useEffect(() => {
+        if (showCommunityChat && communityContainerRef.current) {
+            communityContainerRef.current.scrollTop = communityContainerRef.current.scrollHeight;
         }
     }, [communityMessages, showCommunityChat]);
 
@@ -912,13 +918,12 @@ function ChessGame({ user, onLogout }) {
                             <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
                                 🌍 COMMUNITY CHAT
                             </div>
-                            <div style={{ flexGrow: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                            <div ref={communityContainerRef} style={{ flexGrow: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 {communityMessages.map((m, i) => (
                                     <div key={i} style={{ backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', fontSize: '11px', wordWrap: 'break-word' }}>
                                         <strong style={{ color: m.senderEmail === userEmail ? '#38bdf8' : '#10b981' }}>{m.senderEmail?.split('@')[0] || 'Unknown'}:</strong> <span style={{ color: '#ddd' }}>{m.text}</span>
                                     </div>
                                 ))}
-                                <div ref={communityEndRef} />
                             </div>
                             <form onSubmit={sendCommunityMessage} style={{ display: 'flex', borderTop: '1px solid #333', padding: '10px', flexShrink: 0 }}>
                                 <input id="community-input" type="text" value={communityInput} onChange={e => setCommunityInput(e.target.value)} placeholder="Say something..." style={{ flexGrow: 1, padding: '8px', backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px 0 0 4px', outline: 'none', fontSize: '11px', minWidth: 0 }} />
@@ -1041,13 +1046,12 @@ function ChessGame({ user, onLogout }) {
 
                         <div style={{ backgroundColor: '#1e1e1e', border: '1px solid #333', borderRadius: '8px', display: 'flex', flexDirection: 'column', height: '220px', flexShrink: 0 }}>
                             <div style={{ padding: '8px', borderBottom: '1px solid #333', fontSize: '12px', color: '#38bdf8', fontWeight: 'bold' }}>GAME CHAT</div>
-                            <div style={{ flexGrow: 1, overflowY: 'auto', padding: '8px', fontSize: '13px' }}>
+                            <div ref={chatContainerRef} style={{ flexGrow: 1, overflowY: 'auto', padding: '8px', fontSize: '13px' }}>
                                 {chatMessages.map((m, i) => (
                                     <div key={i} style={{ marginBottom: '8px', textAlign: m.sender === userEmail ? 'right' : 'left' }}>
                                         <div style={{ display: 'inline-block', padding: '6px 10px', borderRadius: '12px', backgroundColor: m.sender === userEmail ? '#075e54' : '#333', maxWidth: '80%' }}>{m.text}</div>
                                     </div>
                                 ))}
-                                <div ref={chatEndRef} />
                             </div>
                             <form onSubmit={sendChatMessage} style={{ display: 'flex', borderTop: '1px solid #333' }}>
                                 <input disabled={!opponent} type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={opponent ? "Type message..." : "Chat locked"} style={{ flexGrow: 1, padding: '10px', backgroundColor: 'transparent', color: 'white', border: 'none', outline: 'none', minWidth: 0 }} />
