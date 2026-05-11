@@ -586,6 +586,17 @@ function ChessGame({ user, onLogout, language, setLanguage }) {
         return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
     };
 
+    // --- Helper function to determine Player Names for Timers ---
+    const getPlayerName = (color) => {
+        if (!opponent && !isPlayingComputer) return "Waiting...";
+        if (playerColor === color) return `${userEmail.split('@')[0]} (You)`;
+        return isPlayingComputer ? "Computer" : (opponent ? opponent.split('@')[0] : "Opponent");
+    };
+
+    const whitePlayerName = getPlayerName('w');
+    const blackPlayerName = getPlayerName('b');
+    // -------------------------------------------------------------
+
     const formattedHistory = [];
     for (let i = 0; i < moveHistory.length; i += 2) { formattedHistory.push({ turn: Math.floor(i / 2) + 1, w: moveHistory[i], b: moveHistory[i + 1] || '' }); }
 
@@ -692,9 +703,17 @@ function ChessGame({ user, onLogout, language, setLanguage }) {
                             </div>
                         )}
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px', fontSize: isMobile ? '16px' : '20px', fontWeight: 'bold' }}>
-                            <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'w' ? '#38bdf8' : '#333' }}>⬜ {formatTime(whiteTime)}</div>
-                            <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'b' ? '#38bdf8' : '#333' }}>⬛ {formatTime(blackTime)}</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: '10px', fontSize: isMobile ? '12px' : '15px', fontWeight: 'bold', gap: '10px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 10px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'w' ? '#38bdf8' : '#333', color: displayGame.turn() === 'w' ? '#000' : '#fff', flex: 1, overflow: 'hidden' }}>
+                                <span style={{ fontSize: isMobile ? '14px' : '18px' }}>⬜</span>
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexGrow: 1 }}>{whitePlayerName}</span>
+                                <span>{formatTime(whiteTime)}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 10px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'b' ? '#38bdf8' : '#333', color: displayGame.turn() === 'b' ? '#000' : '#fff', flex: 1, overflow: 'hidden' }}>
+                                <span style={{ fontSize: isMobile ? '14px' : '18px' }}>⬛</span>
+                                <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexGrow: 1 }}>{blackPlayerName}</span>
+                                <span>{formatTime(blackTime)}</span>
+                            </div>
                         </div>
                         <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{currentStatusText}</div>
 
