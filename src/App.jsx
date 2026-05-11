@@ -1,22 +1,96 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { supabase } from './supabaseClient';
+import { loadStripe } from '@stripe/stripe-js';
+import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import './App.css';
 
+// Initialize Stripe (Replace 'pk_test_...' with your actual public key)
+const stripePromise = loadStripe('pk_test_YOUR_STRIPE_PUBLIC_KEY');
+
 // ==========================================
-// 🔊 SOUND ASSETS
+// 🌍 TRANSLATIONS DICTIONARY
+// ==========================================
+const translations = {
+    EN: {
+        balance: "Balance", addFunds: "Add Funds", loggedIn: "Logged in", logout: "Logout",
+        communityChat: "COMMUNITY CHAT", saySomething: "Say something...", send: "Send",
+        actionDraw: "🤝 Draw", actionResign: "🏳️ Resign", playComputer: "Play Computer",
+        turnOffGunshot: "Turn off gunshot", turnOnGunshot: "Turn on gunshot",
+        turnOffChatSpeak: "Turn off Chat Speak", turnOnChatSpeak: "Turn on Chat Speak",
+        score: "SCORE", won: "WON", loss: "LOSS", statDraw: "DRAW", history: "HISTORY",
+        gameChat: "GAME CHAT", chatLocked: "Chat locked", typeMessage: "Type message...",
+        travelDeals: "✈️ TRAVEL DEALS (50)", menu: "MENU", coach: "Coach", watch: "Watch",
+        news: "News", community: "Community", online: "Online", members: "Members",
+        time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline",
+        welcomeBack: "Welcome Back", createAccount: "Create Account", signupFree: "Signup for free and play chess for free.",
+        email: "Email", password: "Password", login: "Log In", signup: "Sign Up",
+        needAccount: "Need an account? Sign up", haveAccount: "Have an account? Log in",
+        waitingToStart: "Waiting to start...", gameStarted: "Game started!", yourTurn: "🟢 Your turn",
+        waiting: "🔴 Waiting...", timeOut: "Time Out!", checkmate: "Checkmate!",
+        gameIsDraw: "The game is a Draw!", youWin: "You Win!", youLose: "You Lose!",
+        opponentResigned: "Opponent resigned. You Win!", youResigned: "You resigned. You Lose!",
+        drawOfferSent: "Draw offer sent...", drawAccepted: "Draw Accepted!", drawDeclined: "Draw offer declined."
+    },
+    ES: {
+        balance: "Saldo", addFunds: "Añadir Fondos", loggedIn: "Conectado", logout: "Salir",
+        communityChat: "CHAT COMUNIDAD", saySomething: "Di algo...", send: "Enviar",
+        actionDraw: "🤝 Empate", actionResign: "🏳️ Rendirse", playComputer: "Jugar contra PC",
+        turnOffGunshot: "Apagar disparos", turnOnGunshot: "Activar disparos",
+        turnOffChatSpeak: "Apagar voz de chat", turnOnChatSpeak: "Activar voz de chat",
+        score: "PUNTOS", won: "VICTORIAS", loss: "DERROTAS", statDraw: "EMPATE", history: "HISTORIAL",
+        gameChat: "CHAT DE JUEGO", chatLocked: "Chat bloqueado", typeMessage: "Escribe un mensaje...",
+        travelDeals: "✈️ OFERTAS DE VIAJE", menu: "MENÚ", coach: "Entrenador", watch: "Ver",
+        news: "Noticias", community: "Comunidad", online: "En línea", members: "Miembros",
+        time: "TIEMPO", wager: "APUESTA", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar",
+        welcomeBack: "Bienvenido", createAccount: "Crear Cuenta", signupFree: "Regístrate gratis, juega gratis.",
+        email: "Correo", password: "Contraseña", login: "Iniciar Sesión", signup: "Registrarse",
+        needAccount: "¿Necesitas cuenta? Regístrate", haveAccount: "¿Tienes cuenta? Inicia sesión",
+        waitingToStart: "Esperando para empezar...", gameStarted: "¡Juego iniciado!", yourTurn: "🟢 Tu turno",
+        waiting: "🔴 Esperando...", timeOut: "¡Tiempo agotado!", checkmate: "¡Jaque mate!",
+        gameIsDraw: "¡El juego es un empate!", youWin: "¡Tú ganas!", youLose: "¡Pierdes!",
+        opponentResigned: "El oponente se rindió. ¡Tú ganas!", youResigned: "Te rendiste. ¡Pierdes!",
+        drawOfferSent: "Oferta de empate enviada...", drawAccepted: "¡Empate aceptado!", drawDeclined: "Oferta de empate rechazada."
+    },
+    IT: {
+        balance: "Saldo", addFunds: "Aggiungi Fondi", loggedIn: "Connesso", logout: "Esci",
+        communityChat: "CHAT COMUNITÀ", saySomething: "Dì qualcosa...", send: "Invia",
+        actionDraw: "🤝 Patta", actionResign: "🏳️ Abbandona", playComputer: "Gioca contro PC",
+        turnOffGunshot: "Spegni spari", turnOnGunshot: "Attiva spari",
+        turnOffChatSpeak: "Spegni voce chat", turnOnChatSpeak: "Attiva voce chat",
+        score: "PUNTI", won: "VINTE", loss: "PERSE", statDraw: "PATTE", history: "CRONOLOGIA",
+        gameChat: "CHAT DI GIOCO", chatLocked: "Chat bloccata", typeMessage: "Scrivi messaggio...",
+        travelDeals: "✈️ OFFERTE VIAGGIO", menu: "MENU", coach: "Allenatore", watch: "Guarda",
+        news: "Notizie", community: "Comunità", online: "Online", members: "Membri",
+        time: "TEMPO", wager: "PUNTATA", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta",
+        welcomeBack: "Bentornato", createAccount: "Crea Account", signupFree: "Iscriviti e gioca gratis.",
+        email: "Email", password: "Password", login: "Accedi", signup: "Iscriviti",
+        needAccount: "Serve un account? Iscriviti", haveAccount: "Hai un account? Accedi",
+        waitingToStart: "In attesa di iniziare...", gameStarted: "Gioco iniziato!", yourTurn: "🟢 Il tuo turno",
+        waiting: "🔴 In attesa...", timeOut: "Tempo scaduto!", checkmate: "Scacco matto!",
+        gameIsDraw: "Il gioco è patta!", youWin: "Hai Vinto!", youLose: "Hai Perso!",
+        opponentResigned: "L'avversario ha abbandonato. Hai Vinto!", youResigned: "Hai abbandonato. Hai Perso!",
+        drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata."
+    }
+};
+
+// ==========================================
+// 🔊 SOUND ASSETS & TTS
 // ==========================================
 const sounds = {
     move: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Move.mp3',
     capture: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Capture.mp3',
     check: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Check.mp3',
-    castle: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Move.mp3',
     thunder: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_7845f4fae2.mp3',
 };
 
-const speak = (text) => {
+const speak = (text, langCode = 'EN') => {
     if ('speechSynthesis' in window) {
         const utterance = new SpeechSynthesisUtterance(text);
+        if (langCode === 'ES') utterance.lang = 'es-ES';
+        else if (langCode === 'IT') utterance.lang = 'it-IT';
+        else utterance.lang = 'en-US';
+
         utterance.rate = 1.0;
         utterance.pitch = 1.0;
         window.speechSynthesis.speak(utterance);
@@ -24,27 +98,15 @@ const speak = (text) => {
 };
 
 // ==========================================
-// ✈️ 50 TRAVEL ADS DATA
+// ✈️ TRAVEL ADS DATA & 🧠 AI ENGINE
 // ==========================================
-const cities = [
-    "Paris", "London", "Tokyo", "Bali", "NYC", "Dubai", "Rome", "Swiss Alps", "Maldives", "Sydney",
-    "Barcelona", "Santorini", "Bangkok", "Iceland", "Cairo", "Venice", "Rio", "Kyoto", "Amsterdam", "Prague",
-    "Cape Town", "Machu Picchu", "Lisbon", "Seoul", "Bora Bora", "Hawaii", "Fiji", "Phuket", "Maui", "Florence",
-    "Vienna", "Berlin", "Dublin", "Istanbul", "Marrakech", "Mexico City", "Toronto", "Vancouver", "Singapore", "Hong Kong",
-    "Las Vegas", "LA", "Miami", "Orlando", "New Orleans", "SF", "Austin", "Chicago", "Boston", "Seattle"
-];
-
+const cities = ["Paris", "London", "Tokyo", "Bali", "NYC", "Dubai", "Rome", "Swiss Alps", "Maldives", "Sydney", "Barcelona", "Santorini", "Bangkok", "Iceland", "Cairo", "Venice", "Rio", "Kyoto", "Amsterdam", "Prague", "Cape Town", "Machu Picchu", "Lisbon", "Seoul", "Bora Bora", "Hawaii", "Fiji", "Phuket", "Maui", "Florence", "Vienna", "Berlin", "Dublin", "Istanbul", "Marrakech", "Mexico City", "Toronto", "Vancouver", "Singapore", "Hong Kong", "Las Vegas", "LA", "Miami", "Orlando", "New Orleans", "SF", "Austin", "Chicago", "Boston", "Seattle"];
 const travelAds = cities.map((city, i) => ({
-    id: i,
-    name: `${i % 2 === 0 ? 'Grand Hotel' : 'Luxury Flight'} ${city}`,
+    id: i, name: `${i % 2 === 0 ? 'Grand Hotel' : 'Luxury Flight'} ${city}`,
     url: i % 2 === 0 ? "https://www.booking.com" : "https://www.skyscanner.com",
-    img: `https://picsum.photos/seed/${city}/300/200`,
-    tag: i % 2 === 0 ? "HOTEL" : "FLIGHT"
+    img: `https://picsum.photos/seed/${city}/300/200`, tag: i % 2 === 0 ? "HOTEL" : "FLIGHT"
 }));
 
-// ==========================================
-// 🧠 AI ENGINE
-// ==========================================
 const pieceValues = { p: 10, n: 30, b: 30, r: 50, q: 90, k: 900 };
 function evaluateBoard(gameInstance) {
     let totalEval = 0;
@@ -52,15 +114,11 @@ function evaluateBoard(gameInstance) {
     for (let r = 0; r < 8; r++) {
         for (let c = 0; c < 8; c++) {
             const piece = board[r][c];
-            if (piece) {
-                const val = pieceValues[piece.type];
-                totalEval += piece.color === 'w' ? val : -val;
-            }
+            if (piece) { totalEval += piece.color === 'w' ? pieceValues[piece.type] : -pieceValues[piece.type]; }
         }
     }
     return totalEval;
 }
-
 function minimax(gameInstance, depth, alpha, beta, isMaximizingPlayer) {
     if (depth === 0 || gameInstance.isGameOver()) return evaluateBoard(gameInstance);
     const moves = gameInstance.moves();
@@ -86,11 +144,9 @@ function minimax(gameInstance, depth, alpha, beta, isMaximizingPlayer) {
         return bestVal;
     }
 }
-
 function getBestMove(gameInstance, depth = 2) {
     const moves = gameInstance.moves();
-    let bestMove = null;
-    let bestValue = Infinity;
+    let bestMove = null; let bestValue = Infinity;
     for (let move of moves) {
         gameInstance.move(move);
         const boardValue = minimax(gameInstance, depth - 1, -Infinity, Infinity, true);
@@ -105,9 +161,45 @@ function getBestMove(gameInstance, depth = 2) {
 }
 
 // ==========================================
+// 💳 STRIPE CHECKOUT COMPONENT
+// ==========================================
+function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
+    const stripe = useStripe(); const elements = useElements();
+    const [loading, setLoading] = useState(false); const [error, setError] = useState(null);
+    const handleSubmit = async (event) => {
+        event.preventDefault(); if (!stripe || !elements) return;
+        setLoading(true); setError(null);
+        try {
+            const { data, error: backendError } = await supabase.functions.invoke('create-payment', { body: { amount: amount, userId: userId } });
+            if (backendError || !data?.clientSecret) throw new Error("Failed to initialize payment. Ensure your Supabase Edge Function is running.");
+            const result = await stripe.confirmCardPayment(data.clientSecret, { payment_method: { card: elements.getElement(CardElement) } });
+            if (result.error) { setError(result.error.message); }
+            else if (result.paymentIntent.status === 'succeeded') { alert(`Successfully added $${amount.toFixed(2)}!`); onSuccess(amount); }
+        } catch (err) { setError(err.message || "An error occurred during payment."); }
+        setLoading(false);
+    };
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
+            <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '400px', border: '1px solid #333' }}>
+                <h3 style={{ color: '#38bdf8', marginTop: 0, textAlign: 'center' }}>Deposit ${amount.toFixed(2)}</h3>
+                <form onSubmit={handleSubmit}>
+                    <div style={{ padding: '15px', backgroundColor: '#2c2c2c', borderRadius: '4px', marginBottom: '20px' }}><CardElement options={{ style: { base: { fontSize: '16px', color: '#ffffff', '::placeholder': { color: '#aab7c4' } } } }} /></div>
+                    {error && <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '15px', textAlign: 'center' }}>{error}</div>}
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <button type="button" onClick={onCancel} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
+                        <button type="submit" disabled={!stripe || loading} style={{ flex: 1, padding: '12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Processing...' : `Pay $${amount.toFixed(2)}`}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
+// ==========================================
 // 🔐 AUTH SCREEN
 // ==========================================
-function AuthScreen({ onAuthSuccess }) {
+function AuthScreen({ onAuthSuccess, language, setLanguage }) {
+    const t = translations[language];
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(false);
@@ -116,44 +208,34 @@ function AuthScreen({ onAuthSuccess }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
-
         const cleanEmail = email.trim().toLowerCase();
-
-        let { data, error } = isLogin
-            ? await supabase.auth.signInWithPassword({ email: cleanEmail, password })
-            : await supabase.auth.signUp({ email: cleanEmail, password });
-
+        let { data, error } = isLogin ? await supabase.auth.signInWithPassword({ email: cleanEmail, password }) : await supabase.auth.signUp({ email: cleanEmail, password });
         setLoading(false);
         if (error) alert(error.message);
         else if (data?.user) onAuthSuccess(data.user);
     };
 
     return (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI' }}>
+
+            <select value={language} onChange={(e) => setLanguage(e.target.value)} style={{ position: 'absolute', top: 20, right: 20, backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '6px 10px', outline: 'none' }}>
+                <option value="EN">🇬🇧 EN</option>
+                <option value="ES">🇪🇸 ES</option>
+                <option value="IT">🇮🇹 IT</option>
+            </select>
+
             <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '90%', maxWidth: '320px', border: '1px solid #333' }}>
-                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px' }}>{isLogin ? 'Welcome Back' : 'Create Account'}</h2>
-
-                <div style={{
-                    backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                    color: '#fbbf24',
-                    padding: '12px',
-                    borderRadius: '6px',
-                    border: '1px solid rgba(245, 158, 11, 0.3)',
-                    fontSize: '13px',
-                    marginBottom: '20px',
-                    lineHeight: '1.4',
-                    textAlign: 'center'
-                }}>
-                    Signup for free and play chess for free.
+                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px' }}>{isLogin ? t.welcomeBack : t.createAccount}</h2>
+                <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', padding: '12px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '13px', marginBottom: '20px', lineHeight: '1.4', textAlign: 'center' }}>
+                    {t.signupFree}
                 </div>
-
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    <input type="email" required placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
-                    <input type="password" required placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
-                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>{loading ? '...' : (isLogin ? 'Log In' : 'Sign Up')}</button>
+                    <input type="email" required placeholder={t.email} value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    <input type="password" required placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>{loading ? '...' : (isLogin ? t.login : t.signup)}</button>
                 </form>
                 <div style={{ textAlign: 'center', marginTop: '20px', color: '#aaa', fontSize: '14px' }}>
-                    <span onClick={() => setIsLogin(!isLogin)} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>{isLogin ? 'Need an account? Sign up' : 'Have an account? Log in'}</span>
+                    <span onClick={() => setIsLogin(!isLogin)} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>{isLogin ? t.needAccount : t.haveAccount}</span>
                 </div>
             </div>
         </div>
@@ -163,7 +245,8 @@ function AuthScreen({ onAuthSuccess }) {
 // ==========================================
 // ⚛️ CHESS GAME COMPONENT
 // ==========================================
-function ChessGame({ user, onLogout }) {
+function ChessGame({ user, onLogout, language, setLanguage }) {
+    const t = translations[language];
     const userEmail = user.email;
 
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 800);
@@ -177,11 +260,12 @@ function ChessGame({ user, onLogout }) {
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [moveFrom, setMoveFrom] = useState('');
 
-    const [status, setStatus] = useState("Waiting to start...");
+    const [statusKey, setStatusKey] = useState("waitingToStart");
+    const [customStatus, setCustomStatus] = useState("");
+
     const [isPlayingComputer, setIsPlayingComputer] = useState(false);
     const [challengeTime, setChallengeTime] = useState(600);
 
-    // Wager State
     const [wagerAmount, setWagerAmount] = useState(0);
     const [currentStake, setCurrentStake] = useState(0);
 
@@ -189,7 +273,6 @@ function ChessGame({ user, onLogout }) {
     const [onlineUsers, setOnlineUsers] = useState([]);
     const [allMembers, setAllMembers] = useState([]);
     const [tvGames, setTvGames] = useState([]);
-
     const [chessComStreamers, setChessComStreamers] = useState([]);
 
     const [viewMode, setViewMode] = useState('online');
@@ -197,524 +280,266 @@ function ChessGame({ user, onLogout }) {
     const [incomingChallenge, setIncomingChallenge] = useState(null);
     const [incomingDrawOffer, setIncomingDrawOffer] = useState(false);
 
-    // Game Chat
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
-    const chatContainerRef = useRef(null); // Fix applied here
+    const chatContainerRef = useRef(null);
 
-    // Community Chat
     const [showCommunityChat, setShowCommunityChat] = useState(false);
     const [communityMessages, setCommunityMessages] = useState([]);
     const [communityInput, setCommunityInput] = useState('');
-    const communityContainerRef = useRef(null); // Fix applied here
+    const communityContainerRef = useRef(null);
 
     const [opponent, setOpponent] = useState(null);
     const [playerColor, setPlayerColor] = useState('w');
-
     const [whiteTime, setWhiteTime] = useState(300);
     const [blackTime, setBlackTime] = useState(300);
 
     const timerRef = useRef(null);
     const mySocketId = useRef(Math.random().toString(36).substring(7));
-
-    // Stats including Balance
     const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0 });
 
     const [isGameOverManually, setIsGameOverManually] = useState(false);
-
     const [gunshotEnabled, setGunshotEnabled] = useState(true);
     const gunshotEnabledRef = useRef(gunshotEnabled);
-
-    // Chat TTS State & Ref
     const [speakChatEnabled, setSpeakChatEnabled] = useState(false);
     const speakChatEnabledRef = useRef(speakChatEnabled);
-
-    // Sidebar State
     const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
-    useEffect(() => {
-        gunshotEnabledRef.current = gunshotEnabled;
-        speakChatEnabledRef.current = speakChatEnabled;
-    }, [gunshotEnabled, speakChatEnabled]);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [depositAmount, setDepositAmount] = useState(10);
+
+    useEffect(() => { gunshotEnabledRef.current = gunshotEnabled; speakChatEnabledRef.current = speakChatEnabled; }, [gunshotEnabled, speakChatEnabled]);
 
     const opponentRef = useRef(null);
     const gameRef = useRef(new Chess());
-
     useEffect(() => { opponentRef.current = opponent; }, [opponent]);
 
     const pieceImages = {
-        p: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg',
-        r: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg',
-        n: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
-        b: 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg',
-        q: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg',
-        k: 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
-        P: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg',
-        R: 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg',
-        N: 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
-        B: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg',
-        Q: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg',
-        K: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg'
+        p: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg', r: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg', n: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
+        b: 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg', q: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg', k: 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
+        P: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg', R: 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg', N: 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
+        B: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg', Q: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg', K: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg'
     };
 
     const displayGame = new Chess();
     moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { } });
 
-    useEffect(() => {
-        fetchUserStats();
-        fetchAllMembers();
-        fetchTvGames();
-        fetchChessComTv();
-        fetchCommunityComments();
-    }, []);
-
-    // Scroll Game Chat to bottom safely
-    useEffect(() => {
-        if (chatContainerRef.current) {
-            chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
-        }
-    }, [chatMessages]);
-
-    // Scroll Community Chat to bottom safely
-    useEffect(() => {
-        if (showCommunityChat && communityContainerRef.current) {
-            communityContainerRef.current.scrollTop = communityContainerRef.current.scrollHeight;
-        }
-    }, [communityMessages, showCommunityChat]);
+    useEffect(() => { fetchUserStats(); fetchAllMembers(); fetchTvGames(); fetchChessComTv(); fetchCommunityComments(); }, []);
+    useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatMessages]);
+    useEffect(() => { if (showCommunityChat && communityContainerRef.current) communityContainerRef.current.scrollTop = communityContainerRef.current.scrollHeight; }, [communityMessages, showCommunityChat]);
 
     const fetchUserStats = async () => {
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        if (data) {
-            setStats({
-                wins: data.wins || 0,
-                losses: data.losses || 0,
-                draws: data.draws || 0,
-                score: data.score !== undefined ? data.score : 100,
-                balance: data.balance || 0
-            });
-        }
+        if (data) setStats({ wins: data.wins || 0, losses: data.losses || 0, draws: data.draws || 0, score: data.score !== undefined ? data.score : 100, balance: data.balance || 0 });
     };
 
-    const handleAddFunds = async () => {
+    const handleAddFundsClick = () => {
         const amountStr = prompt("Enter amount to deposit ($):", "10.00");
-        if (!amountStr) return;
-        const amount = parseFloat(amountStr);
-        if (isNaN(amount) || amount <= 0) return;
-
-        const newBalance = (stats.balance || 0) + amount;
-        const { error } = await supabase.from('profiles').update({ balance: newBalance }).eq('id', user.id);
-
-        if (!error) {
-            setStats(prev => ({ ...prev, balance: newBalance }));
-            alert(`Successfully added $${amount.toFixed(2)}`);
-        } else {
-            alert("Failed to add funds.");
-        }
+        if (!amountStr) return; const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount < 1) { alert("Please enter a valid amount of $1.00 or more."); return; }
+        setDepositAmount(amount); setShowPaymentModal(true);
     };
 
-    const fetchAllMembers = async () => {
-        let { data } = await supabase.from('profiles').select('email');
-        if (data) setAllMembers(data);
+    const handlePaymentSuccess = async (amount) => {
+        setShowPaymentModal(false);
+        setStats(prev => ({ ...prev, balance: (prev.balance || 0) + amount }));
     };
 
-    const fetchCommunityComments = async () => {
-        let { data } = await supabase.from('comments').select('*').order('created_at', { ascending: false }).limit(50);
-        if (data) setCommunityMessages(data.reverse());
-    };
+    const fetchAllMembers = async () => { let { data } = await supabase.from('profiles').select('email'); if (data) setAllMembers(data); };
+    const fetchCommunityComments = async () => { let { data } = await supabase.from('comments').select('*').order('created_at', { ascending: false }).limit(50); if (data) setCommunityMessages(data.reverse()); };
 
     const fetchTvGames = async () => {
         try {
             const res = await fetch('https://lichess.org/api/tv/channels');
-            if (!res.ok) throw new Error("Network response was not ok");
             const data = await res.json();
-
-            const gamesList = Object.entries(data).map(([channel, game]) => ({
-                channel: channel,
-                url: `https://lichess.org/${game.gameId}`,
-                white: game.user?.name || 'Unknown',
-                whiteRating: game.rating || '?',
-                black: 'Opponent',
-                blackRating: '?'
-            }));
-
-            setTvGames(gamesList);
-        } catch (e) {
-            console.error("Failed to fetch Lichess TV:", e);
-        }
+            setTvGames(Object.entries(data).map(([channel, game]) => ({ channel, url: `https://lichess.org/${game.gameId}`, white: game.user?.name || 'Unknown', whiteRating: game.rating || '?', black: 'Opponent', blackRating: '?' })));
+        } catch (e) { }
     };
 
     const fetchChessComTv = async () => {
         try {
             const res = await fetch('https://api.chess.com/pub/streamers');
-            if (!res.ok) throw new Error("Network response was not ok");
             const data = await res.json();
-
-            const liveStreamers = data.streamers.filter(s => s.is_live);
-            setChessComStreamers(liveStreamers);
-        } catch (e) {
-            console.error("Failed to fetch Chess.com TV:", e);
-        }
+            setChessComStreamers(data.streamers.filter(s => s.is_live));
+        } catch (e) { }
     };
 
     const playMoveSound = (move, gameInstance) => {
         let audioUrl = sounds.move;
-        if (gameInstance.inCheck()) {
-            audioUrl = sounds.check;
-            speak("Check");
-        }
+        if (gameInstance.inCheck()) { audioUrl = sounds.check; speak("Check", language); }
         else if (move.captured) audioUrl = sounds.capture;
         new Audio(audioUrl).play().catch(() => { });
     };
 
     const triggerCaptureEffects = (square, capturedColor) => {
-        if (gunshotEnabledRef.current) {
-            new Audio('/shotgun.mp3').play().catch(() => { });
-        }
+        if (gunshotEnabledRef.current) new Audio('/shotgun.mp3').play().catch(() => { });
         setExplosion({ square, color: capturedColor });
         setTimeout(() => setExplosion(null), 1000);
     };
 
     const recordResult = async (type) => {
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        const currentStats = data || stats;
-        const updates = { ...currentStats };
-
-        if (updates.score === undefined) updates.score = 100;
-        if (updates.balance === undefined) updates.balance = 0;
-
-        if (type === 'win') {
-            updates.wins += 1;
-            updates.score += 8;
-            updates.balance += currentStake;
-        }
-        if (type === 'loss') {
-            updates.losses += 1;
-            updates.score -= 8;
-            updates.balance -= currentStake;
-        }
-        if (type === 'draw') {
-            updates.draws += 1;
-        }
-
-        await supabase.from('profiles').update({
-            wins: updates.wins,
-            losses: updates.losses,
-            draws: updates.draws,
-            score: updates.score,
-            balance: updates.balance
-        }).eq('id', user.id);
-
-        setStats(updates);
-        setCurrentStake(0); // Reset stake after game
+        const updates = { ...data, score: data?.score || 100, balance: data?.balance || 0 };
+        if (type === 'win') { updates.wins += 1; updates.score += 8; updates.balance += currentStake; }
+        if (type === 'loss') { updates.losses += 1; updates.score -= 8; updates.balance -= currentStake; }
+        if (type === 'draw') { updates.draws += 1; }
+        await supabase.from('profiles').update({ wins: updates.wins, losses: updates.losses, draws: updates.draws, score: updates.score, balance: updates.balance }).eq('id', user.id);
+        setStats(updates); setCurrentStake(0);
     };
 
     const resetMatch = (timeControl = 300) => {
-        gameRef.current = new Chess();
-        setMoveHistory([]);
-        setCurrentMoveIndex(0);
-        setWhiteTime(timeControl);
-        setBlackTime(timeControl);
-        setMoveFrom('');
-        setIsGameOverManually(false);
-        setIncomingDrawOffer(false);
-        setChatMessages([]);
+        gameRef.current = new Chess(); setMoveHistory([]); setCurrentMoveIndex(0);
+        setWhiteTime(timeControl); setBlackTime(timeControl); setMoveFrom('');
+        setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
     };
 
     useEffect(() => {
-        const channel = supabase.channel('chess-lobby');
-        setLobbyChannel(channel);
-
+        const channel = supabase.channel('chess-lobby'); setLobbyChannel(channel);
         channel
             .on('presence', { event: 'sync' }, () => {
-                const state = channel.presenceState();
-                const activePresences = [];
-                for (const key in state) { state[key].forEach(p => activePresences.push(p)); }
-                setOnlineUsers(activePresences);
+                const state = channel.presenceState(); const active = [];
+                for (const key in state) { state[key].forEach(p => active.push(p)); }
+                setOnlineUsers(active);
             })
             .on('broadcast', { event: 'challenge' }, ({ payload }) => {
-                if (payload.targetEmail === userEmail) {
-                    setIncomingChallenge({
-                        email: payload.challengerEmail,
-                        timeControl: payload.timeControl,
-                        wagerAmount: payload.wagerAmount || 0
-                    });
-                }
+                if (payload.targetEmail === userEmail) setIncomingChallenge({ email: payload.challengerEmail, timeControl: payload.timeControl, wagerAmount: payload.wagerAmount || 0 });
             })
             .on('broadcast', { event: 'accept' }, ({ payload }) => {
                 if (payload.challengerEmail === userEmail) {
-                    setOpponent(payload.targetEmail);
-                    setIsPlayingComputer(false);
-                    setPlayerColor('w');
-                    setCurrentStake(payload.wagerAmount || 0);
-                    resetMatch(payload.timeControl);
-
-                    setStatus(`Game started! Stake: $${payload.wagerAmount || 0}`);
-                    speak("Game started");
+                    setOpponent(payload.targetEmail); setIsPlayingComputer(false); setPlayerColor('w'); setCurrentStake(payload.wagerAmount || 0); resetMatch(payload.timeControl);
+                    setStatusKey("gameStarted"); setCustomStatus(` $${payload.wagerAmount || 0}`);
+                    speak(t.gameStarted, language);
                 }
             })
-            .on('broadcast', { event: 'declineChallenge' }, ({ payload }) => {
-                if (payload.targetEmail === userEmail) setStatus("Challenge declined.");
-            })
+            .on('broadcast', { event: 'declineChallenge' }, ({ payload }) => { if (payload.targetEmail === userEmail) { setStatusKey(""); setCustomStatus("Challenge declined."); } })
             .on('broadcast', { event: 'move' }, ({ payload }) => {
                 if (payload.targetEmail === userEmail) {
                     const moveResult = gameRef.current.move(payload.moveSan);
                     if (moveResult) {
                         playMoveSound(moveResult, gameRef.current);
                         if (moveResult.captured) triggerCaptureEffects(payload.to, moveResult.color === 'w' ? 'b' : 'w');
-                        setMoveHistory(prev => {
-                            const next = [...prev, payload.moveSan];
-                            setCurrentMoveIndex(next.length);
-                            return next;
-                        });
+                        setMoveHistory(prev => { const next = [...prev, payload.moveSan]; setCurrentMoveIndex(next.length); return next; });
                     }
                 }
             })
             .on('broadcast', { event: 'chat' }, ({ payload }) => {
                 if (payload.targetEmail === userEmail && payload.senderEmail === opponentRef.current) {
                     setChatMessages(prev => [...prev, { text: payload.text, sender: payload.senderEmail }]);
-                    if (speakChatEnabledRef.current) {
-                        speak(payload.text);
-                    }
+                    if (speakChatEnabledRef.current) speak(payload.text, language);
                 }
             })
             .on('broadcast', { event: 'resign' }, ({ payload }) => {
                 if (payload.targetEmail === userEmail && !isGameOverManually) {
-                    setIsGameOverManually(true);
-                    const msg = "Opponent resigned. You Win!";
-                    setStatus(msg);
-                    speak(msg);
-                    recordResult('win');
+                    setIsGameOverManually(true); setStatusKey("opponentResigned"); setCustomStatus(""); speak(t.opponentResigned, language); recordResult('win');
                 }
             })
-            .on('broadcast', { event: 'drawOffer' }, ({ payload }) => {
-                if (payload.targetEmail === userEmail) setIncomingDrawOffer(true);
-            })
+            .on('broadcast', { event: 'drawOffer' }, ({ payload }) => { if (payload.targetEmail === userEmail) setIncomingDrawOffer(true); })
             .on('broadcast', { event: 'drawAccepted' }, ({ payload }) => {
-                if (payload.targetEmail === userEmail) {
-                    setIsGameOverManually(true);
-                    setStatus("Draw Accepted!");
-                    speak("The game is a draw");
-                    recordResult('draw');
-                }
+                if (payload.targetEmail === userEmail) { setIsGameOverManually(true); setStatusKey("drawAccepted"); setCustomStatus(""); speak(t.drawAccepted, language); recordResult('draw'); }
             })
-            .on('broadcast', { event: 'drawDeclined' }, ({ payload }) => {
-                if (payload.targetEmail === userEmail) { setStatus("Draw offer declined."); setIncomingDrawOffer(false); }
-            })
-            .subscribe(async (s) => {
-                if (s === 'SUBSCRIBED') await channel.track({
-                    email: userEmail,
-                    socketId: mySocketId.current,
-                    isPlaying: !!(opponent || isPlayingComputer)
-                });
-            });
+            .on('broadcast', { event: 'drawDeclined' }, ({ payload }) => { if (payload.targetEmail === userEmail) { setStatusKey("drawDeclined"); setCustomStatus(""); setIncomingDrawOffer(false); } })
+            .subscribe(async (s) => { if (s === 'SUBSCRIBED') await channel.track({ email: userEmail, socketId: mySocketId.current, isPlaying: !!(opponent || isPlayingComputer) }); });
 
-        const commentsSub = supabase.channel('custom-all-comments')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
-                setCommunityMessages(prev => {
-                    if (prev.find(m => m.id === payload.new.id)) return prev;
-                    return [...prev, payload.new];
-                });
-            })
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-            supabase.removeChannel(commentsSub);
-        };
-    }, [userEmail, isGameOverManually]);
+        const commentsSub = supabase.channel('custom-all-comments').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
+            setCommunityMessages(prev => prev.find(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
+        }).subscribe();
+        return () => { supabase.removeChannel(channel); supabase.removeChannel(commentsSub); };
+    }, [userEmail, isGameOverManually, language, t]);
 
     useEffect(() => {
-        if (lobbyChannel) {
-            lobbyChannel.track({
-                email: userEmail,
-                socketId: mySocketId.current,
-                isPlaying: !!(opponent || isPlayingComputer)
-            }).catch(() => { });
-        }
+        if (lobbyChannel) lobbyChannel.track({ email: userEmail, socketId: mySocketId.current, isPlaying: !!(opponent || isPlayingComputer) }).catch(() => { });
     }, [opponent, isPlayingComputer, lobbyChannel, userEmail]);
 
     useEffect(() => {
-        if (displayGame.isGameOver() || isGameOverManually || currentMoveIndex < moveHistory.length || (!opponent && !isPlayingComputer)) {
-            clearInterval(timerRef.current);
-            return;
-        }
+        if (displayGame.isGameOver() || isGameOverManually || currentMoveIndex < moveHistory.length || (!opponent && !isPlayingComputer)) { clearInterval(timerRef.current); return; }
         timerRef.current = setInterval(() => {
-            if (displayGame.turn() === 'w') setWhiteTime(t => Math.max(0, t - 1));
-            else setBlackTime(t => Math.max(0, t - 1));
+            if (displayGame.turn() === 'w') setWhiteTime(t => Math.max(0, t - 1)); else setBlackTime(t => Math.max(0, t - 1));
         }, 1000);
         return () => clearInterval(timerRef.current);
     }, [moveHistory, currentMoveIndex, isGameOverManually, opponent, isPlayingComputer]);
 
     useEffect(() => {
         if (!isGameOverManually && (whiteTime === 0 || blackTime === 0)) {
-            setIsGameOverManually(true);
-            const winnerColor = whiteTime === 0 ? "b" : "w";
-            const outcome = playerColor === winnerColor ? "You Win!" : "You Lose!";
-            const msg = `Time Out! ${outcome}`;
-            setStatus(msg);
-            speak(msg);
-            recordResult(playerColor === winnerColor ? 'win' : 'loss');
+            setIsGameOverManually(true); const winnerColor = whiteTime === 0 ? "b" : "w";
+            setStatusKey("timeOut"); setCustomStatus(` ${playerColor === winnerColor ? t.youWin : t.youLose}`);
+            speak(t.timeOut, language); recordResult(playerColor === winnerColor ? 'win' : 'loss');
         }
-    }, [whiteTime, blackTime, isGameOverManually, playerColor]);
+    }, [whiteTime, blackTime, isGameOverManually, playerColor, language, t]);
 
     useEffect(() => {
         if (displayGame.isCheckmate()) {
-            const loserColor = displayGame.turn();
-            const outcome = playerColor === loserColor ? "You Lose!" : "You Win!";
-            const msg = `Checkmate! ${outcome}`;
-            setStatus(msg);
+            const loserColor = displayGame.turn(); const outcome = playerColor === loserColor ? t.youLose : t.youWin;
+            setStatusKey("checkmate"); setCustomStatus(` ${outcome}`);
             if (!isGameOverManually) {
-                setIsGameOverManually(true);
-                speak(msg);
-
-                new Audio(sounds.thunder).play().catch((err) => console.error("Thunder sound failed to play:", err));
-
-                if (gunshotEnabledRef.current) {
-                    const delayBetweenShots = 400;
-                    for (let i = 0; i < 3; i++) {
-                        setTimeout(() => {
-                            new Audio('/shotgun.mp3').play().catch(() => { });
-                        }, i * delayBetweenShots);
-                    }
-                }
-
+                setIsGameOverManually(true); speak(t.checkmate, language);
+                new Audio(sounds.thunder).play().catch(() => { });
+                if (gunshotEnabledRef.current) { for (let i = 0; i < 3; i++) setTimeout(() => new Audio('/shotgun.mp3').play().catch(() => { }), i * 400); }
                 recordResult(playerColor === loserColor ? 'loss' : 'win');
             }
         } else if (displayGame.isDraw()) {
-            const msg = "The game is a Draw!";
-            setStatus(msg);
-            if (!isGameOverManually) {
-                setIsGameOverManually(true);
-                speak(msg);
-                recordResult('draw');
-            }
+            setStatusKey("gameIsDraw"); setCustomStatus("");
+            if (!isGameOverManually) { setIsGameOverManually(true); speak(t.gameIsDraw, language); recordResult('draw'); }
         } else if (!isGameOverManually && (opponent || isPlayingComputer)) {
             const isMyTurn = displayGame.turn() === playerColor;
-            const newStatus = isMyTurn ? "🟢 Your turn" : "🔴 Waiting...";
-
-            if (moveHistory.length > 0 && status !== newStatus) {
-                setStatus(newStatus);
-                if (isMyTurn) {
-                    speak("Your move");
-                }
-            }
+            const newStatusKey = isMyTurn ? "yourTurn" : "waiting";
+            if (moveHistory.length > 0 && statusKey !== newStatusKey) { setStatusKey(newStatusKey); setCustomStatus(""); }
         }
-    }, [moveHistory, playerColor, isGameOverManually, opponent, isPlayingComputer, status]);
+    }, [moveHistory, playerColor, isGameOverManually, opponent, isPlayingComputer, statusKey, language, t]);
 
     const sendChatMessage = async (e) => {
-        e.preventDefault();
-        if (!chatInput.trim() || !opponent) return;
+        e.preventDefault(); if (!chatInput.trim() || !opponent) return;
         await lobbyChannel.send({ type: 'broadcast', event: 'chat', payload: { targetEmail: opponent, senderEmail: userEmail, text: chatInput } });
-        setChatMessages(prev => [...prev, { text: chatInput, sender: userEmail }]);
-        setChatInput('');
+        setChatMessages(prev => [...prev, { text: chatInput, sender: userEmail }]); setChatInput('');
     };
 
     const sendCommunityMessage = async (e) => {
-        e.preventDefault();
-        if (!communityInput.trim()) return;
-
-        const newMsg = { text: communityInput, senderEmail: userEmail };
-        setCommunityInput('');
-        const { error } = await supabase.from('comments').insert([newMsg]);
-        if (error) console.error("Error sending community message:", error.message);
+        e.preventDefault(); if (!communityInput.trim()) return;
+        const { error } = await supabase.from('comments').insert([{ text: communityInput, senderEmail: userEmail }]);
+        setCommunityInput(''); if (error) console.error(error.message);
     };
 
     const handleSendChallenge = async (targetEmail) => {
-        if (wagerAmount > stats.balance) {
-            alert("Insufficient funds to make this wager!");
-            return;
-        }
+        if (wagerAmount > stats.balance) { alert("Insufficient funds!"); return; }
         if (!lobbyChannel) return;
-        setStatus(`Challenge sent for $${wagerAmount}...`);
-        await lobbyChannel.send({
-            type: 'broadcast',
-            event: 'challenge',
-            payload: { challengerEmail: userEmail, targetEmail, timeControl: challengeTime, wagerAmount }
-        });
+        setStatusKey(""); setCustomStatus(`Challenge sent for $${wagerAmount}...`);
+        await lobbyChannel.send({ type: 'broadcast', event: 'challenge', payload: { challengerEmail: userEmail, targetEmail, timeControl: challengeTime, wagerAmount } });
     };
 
     const handleAcceptChallenge = async () => {
         if (!lobbyChannel || !incomingChallenge) return;
-        if (stats.balance < incomingChallenge.wagerAmount) {
-            alert("Insufficient funds to accept this wager!");
-            return;
-        }
-
-        await lobbyChannel.send({
-            type: 'broadcast',
-            event: 'accept',
-            payload: {
-                challengerEmail: incomingChallenge.email,
-                targetEmail: userEmail,
-                timeControl: incomingChallenge.timeControl,
-                wagerAmount: incomingChallenge.wagerAmount
-            }
-        });
-
-        setOpponent(incomingChallenge.email);
-        setIsPlayingComputer(false);
-        setPlayerColor('b');
-        setCurrentStake(incomingChallenge.wagerAmount);
-        resetMatch(incomingChallenge.timeControl);
-
-        setStatus(`Game started! Stake: $${incomingChallenge.wagerAmount}`);
-        speak("Game started");
-
-        setIncomingChallenge(null);
+        if (stats.balance < incomingChallenge.wagerAmount) { alert("Insufficient funds!"); return; }
+        await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge.email, targetEmail: userEmail, timeControl: incomingChallenge.timeControl, wagerAmount: incomingChallenge.wagerAmount } });
+        setOpponent(incomingChallenge.email); setIsPlayingComputer(false); setPlayerColor('b'); setCurrentStake(incomingChallenge.wagerAmount); resetMatch(incomingChallenge.timeControl);
+        setStatusKey("gameStarted"); setCustomStatus(` $${incomingChallenge.wagerAmount}`);
+        speak(t.gameStarted, language); setIncomingChallenge(null);
     };
 
     const handleDeclineChallenge = () => {
-        if (lobbyChannel && incomingChallenge) {
-            lobbyChannel.send({ type: 'broadcast', event: 'declineChallenge', payload: { targetEmail: incomingChallenge.email, declinerEmail: userEmail } });
-        }
+        if (lobbyChannel && incomingChallenge) lobbyChannel.send({ type: 'broadcast', event: 'declineChallenge', payload: { targetEmail: incomingChallenge.email, declinerEmail: userEmail } });
         setIncomingChallenge(null);
     };
 
     const handleResign = () => {
         if (isGameOverManually || (!opponent && !isPlayingComputer)) return;
-
         if (window.confirm("Are you sure you want to resign?")) {
-            setIsGameOverManually(true);
-            const msg = "You resigned. You Lose!";
-            setStatus(msg);
-            speak(msg);
-            recordResult('loss');
-
-            if (opponent) {
-                lobbyChannel.send({ type: 'broadcast', event: 'resign', payload: { targetEmail: opponentRef.current } });
-            }
+            setIsGameOverManually(true); setStatusKey("youResigned"); setCustomStatus(""); speak(t.youResigned, language); recordResult('loss');
+            if (opponent) lobbyChannel.send({ type: 'broadcast', event: 'resign', payload: { targetEmail: opponentRef.current } });
         }
     };
 
     const handleDrawOffer = () => {
         if (isGameOverManually || (!opponent && !isPlayingComputer)) return;
-
-        if (opponent) {
-            lobbyChannel.send({ type: 'broadcast', event: 'drawOffer', payload: { targetEmail: opponent } });
-            setStatus("Draw offer sent...");
-        } else if (isPlayingComputer) {
-            setIsGameOverManually(true);
-            const msg = "Computer accepts the draw!";
-            setStatus(msg);
-            speak(msg);
-            recordResult('draw');
-        }
+        if (opponent) { lobbyChannel.send({ type: 'broadcast', event: 'drawOffer', payload: { targetEmail: opponent } }); setStatusKey("drawOfferSent"); setCustomStatus(""); }
+        else if (isPlayingComputer) { setIsGameOverManually(true); setStatusKey(""); setCustomStatus("Computer accepts the draw!"); speak("Computer accepts the draw", language); recordResult('draw'); }
     };
 
     const handleDeclineDraw = () => {
-        if (opponentRef.current) {
-            lobbyChannel.send({ type: 'broadcast', event: 'drawDeclined', payload: { targetEmail: opponentRef.current } });
-        }
+        if (opponentRef.current) lobbyChannel.send({ type: 'broadcast', event: 'drawDeclined', payload: { targetEmail: opponentRef.current } });
         setIncomingDrawOffer(false);
     };
 
     const acceptDraw = () => {
-        setIsGameOverManually(true);
-        const msg = "Draw agreed!";
-        setStatus(msg);
-        speak(msg);
-        recordResult('draw');
-        setIncomingDrawOffer(false);
+        setIsGameOverManually(true); setStatusKey("drawAccepted"); setCustomStatus(""); speak(t.drawAccepted, language); recordResult('draw'); setIncomingDrawOffer(false);
         if (opponent) lobbyChannel.send({ type: 'broadcast', event: 'drawAccepted', payload: { targetEmail: opponentRef.current } });
     };
 
@@ -733,16 +558,9 @@ function ChessGame({ user, onLogout }) {
             if (move) {
                 playMoveSound(move, gameRef.current);
                 if (move.captured) triggerCaptureEffects(square, move.color === 'w' ? 'b' : 'w');
-                const nextHistory = [...moveHistory, move.san];
-                setMoveHistory(nextHistory);
-                setCurrentMoveIndex(nextHistory.length);
-                setMoveFrom('');
-                if (opponentRef.current) {
-                    lobbyChannel.send({ type: 'broadcast', event: 'move', payload: { targetEmail: opponentRef.current, moveSan: move.san, captured: !!move.captured, to: move.to } });
-                }
-            } else {
-                if (piece?.color === displayGame.turn()) setMoveFrom(square); else setMoveFrom('');
-            }
+                const nextHistory = [...moveHistory, move.san]; setMoveHistory(nextHistory); setCurrentMoveIndex(nextHistory.length); setMoveFrom('');
+                if (opponentRef.current) lobbyChannel.send({ type: 'broadcast', event: 'move', payload: { targetEmail: opponentRef.current, moveSan: move.san, captured: !!move.captured, to: move.to } });
+            } else { if (piece?.color === displayGame.turn()) setMoveFrom(square); else setMoveFrom(''); }
         } catch (e) { setMoveFrom(''); }
     }
 
@@ -755,8 +573,7 @@ function ChessGame({ user, onLogout }) {
                 if (moveData) {
                     playMoveSound(moveData, gameRef.current);
                     if (moveData.captured) triggerCaptureEffects(moveData.to, moveData.color === 'w' ? 'b' : 'w');
-                    setMoveHistory(prev => [...prev, bestMove]);
-                    setCurrentMoveIndex(prev => prev + 1);
+                    setMoveHistory(prev => [...prev, bestMove]); setCurrentMoveIndex(prev => prev + 1);
                 }
             }, 600);
             return () => clearTimeout(timer);
@@ -772,45 +589,22 @@ function ChessGame({ user, onLogout }) {
     const formattedHistory = [];
     for (let i = 0; i < moveHistory.length; i += 2) { formattedHistory.push({ turn: Math.floor(i / 2) + 1, w: moveHistory[i], b: moveHistory[i + 1] || '' }); }
 
-    const board = [];
-    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+    const board = []; const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
     const rowOrder = playerColor === 'w' ? [7, 6, 5, 4, 3, 2, 1, 0] : [0, 1, 2, 3, 4, 5, 6, 7];
     const colOrder = playerColor === 'w' ? [0, 1, 2, 3, 4, 5, 6, 7] : [7, 6, 5, 4, 3, 2, 1, 0];
 
     rowOrder.forEach((row) => {
         colOrder.forEach((col) => {
-            const square = `${files[col]}${row + 1}`;
-            const piece = displayGame.get(square);
-            const isSelected = moveFrom === square;
+            const square = `${files[col]}${row + 1}`; const piece = displayGame.get(square); const isSelected = moveFrom === square;
             board.push(
                 <div key={square} onClick={() => onSquareClick(square)} style={{ position: 'relative', width: '100%', aspectRatio: '1 / 1', display: 'flex', justifyContent: 'center', alignItems: 'center', cursor: 'pointer', backgroundColor: isSelected ? '#f6f669' : ((row + col) % 2 === 0 ? '#5c7fb8' : '#ffffff') }}>
                     {piece && <img src={pieceImages[piece.color === 'w' ? piece.type.toUpperCase() : piece.type.toLowerCase()]} alt="" style={{ width: '90%', pointerEvents: 'none' }} />}
-
                     {explosion?.square === square && (
                         <div style={{ position: 'absolute', top: '50%', left: '50%', width: 0, height: 0, zIndex: 999 }}>
                             {[...Array(40)].map((_, idx) => {
-                                const angle = Math.random() * Math.PI * 2;
-                                const dist = 50 + Math.random() * 350;
-                                const tx = `${Math.cos(angle) * dist}px`;
-                                const ty = `${Math.sin(angle) * dist}px`;
-                                const rot = `${(Math.random() - 0.5) * 720}deg`;
-                                const size = 10 + Math.random() * 15;
-                                const bg = 'red';
+                                const angle = Math.random() * Math.PI * 2; const dist = 50 + Math.random() * 350; const size = 10 + Math.random() * 15;
                                 return (
-                                    <div key={idx} style={{
-                                        position: 'absolute',
-                                        width: `${size}px`,
-                                        height: `${size}px`,
-                                        backgroundColor: bg,
-                                        border: '1px solid #8b0000',
-                                        borderRadius: Math.random() > 0.5 ? '50%' : '2px',
-                                        top: `-${size / 2}px`,
-                                        left: `-${size / 2}px`,
-                                        animation: 'shatterPiece 1s cubic-bezier(0.15, 0.9, 0.3, 1) forwards',
-                                        '--tx': tx,
-                                        '--ty': ty,
-                                        '--rot': rot
-                                    }} />
+                                    <div key={idx} style={{ position: 'absolute', width: `${size}px`, height: `${size}px`, backgroundColor: 'red', border: '1px solid #8b0000', borderRadius: Math.random() > 0.5 ? '50%' : '2px', top: `-${size / 2}px`, left: `-${size / 2}px`, animation: 'shatterPiece 1s cubic-bezier(0.15, 0.9, 0.3, 1) forwards', '--tx': `${Math.cos(angle) * dist}px`, '--ty': `${Math.sin(angle) * dist}px`, '--rot': `${(Math.random() - 0.5) * 720}deg` }} />
                                 );
                             })}
                         </div>
@@ -821,93 +615,45 @@ function ChessGame({ user, onLogout }) {
     });
 
     const sideMenuItems = [
-        { icon: '👨‍🏫', label: 'Coach' },
-        { icon: '👁️', label: 'Watch' },
-        { icon: '📰', label: 'News' },
-        { icon: '👥', label: 'Community' }
+        { icon: '👨‍🏫', label: t.coach }, { icon: '👁️', label: t.watch },
+        { icon: '📰', label: t.news }, { icon: '👥', label: t.community }
     ];
+
+    const currentStatusText = statusKey ? t[statusKey] + customStatus : customStatus;
 
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
-            <style>
-                {`
-                @keyframes shatterPiece {
-                    0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; }
-                    70% { opacity: 0.8; }
-                    100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; }
-                }
-                `}
-            </style>
+            <style>{`@keyframes shatterPiece { 0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; } 70% { opacity: 0.8; } 100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; } }`}</style>
 
-            <nav
-                onMouseEnter={() => setIsSidebarHovered(true)}
-                onMouseLeave={() => setIsSidebarHovered(false)}
-                style={{
-                    height: '100vh',
-                    width: isSidebarHovered ? '200px' : '60px',
-                    backgroundColor: '#262421',
-                    borderRight: '1px solid #333',
-                    transition: 'width 0.2s ease',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    flexShrink: 0,
-                    zIndex: 1000,
-                    overflow: 'hidden'
-                }}
-            >
+            {showPaymentModal && <Elements stripe={stripePromise}><CheckoutForm amount={depositAmount} userId={user.id} onSuccess={handlePaymentSuccess} onCancel={() => setShowPaymentModal(false)} /></Elements>}
+
+            <nav onMouseEnter={() => setIsSidebarHovered(true)} onMouseLeave={() => setIsSidebarHovered(false)} style={{ height: '100vh', width: isSidebarHovered ? '200px' : '60px', backgroundColor: '#262421', borderRight: '1px solid #333', transition: 'width 0.2s ease', display: 'flex', flexDirection: 'column', flexShrink: 0, zIndex: 1000, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', padding: '15px 18px', borderBottom: '1px solid #333', marginBottom: '10px', height: '60px', flexShrink: 0 }}>
                     <span style={{ fontSize: '24px', marginRight: '15px' }}>♞</span>
-                    <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#888', opacity: isSidebarHovered ? 1 : 0, transition: 'opacity 0.2s', whiteSpace: 'nowrap' }}>MENU</span>
+                    <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#888', opacity: isSidebarHovered ? 1 : 0, transition: 'opacity 0.2s', whiteSpace: 'nowrap' }}>{t.menu}</span>
                 </div>
-
                 {sideMenuItems.map((item) => (
-                    <div
-                        key={item.label}
-                        onClick={() => {
-                            if (item.label === 'Community') {
-                                setShowCommunityChat(prev => !prev);
-                                setTimeout(() => document.getElementById('community-input')?.focus(), 100);
-                            } else if (item.label === 'Coach') {
-                                window.open('https://www.chess.com/play/coach', '_blank', 'noopener,noreferrer');
-                            }
-                        }}
-                        style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            padding: '12px 18px',
-                            cursor: 'pointer',
-                            whiteSpace: 'nowrap',
-                            transition: 'background 0.2s',
-                            color: '#b0b0b0'
-                        }}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'}
-                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    >
+                    <div key={item.label} onClick={() => {
+                        if (item.label === t.community) { setShowCommunityChat(prev => !prev); setTimeout(() => document.getElementById('community-input')?.focus(), 100); }
+                        else if (item.label === t.coach) { window.open('https://www.chess.com/play/coach', '_blank', 'noopener,noreferrer'); }
+                    }} style={{ display: 'flex', alignItems: 'center', padding: '12px 18px', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background 0.2s', color: '#b0b0b0' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                         <span style={{ fontSize: '22px', width: '30px', textAlign: 'center' }}>{item.icon}</span>
-                        <span style={{
-                            marginLeft: '10px',
-                            fontSize: '15px',
-                            fontWeight: 'bold',
-                            opacity: isSidebarHovered ? 1 : 0,
-                            transition: 'opacity 0.2s'
-                        }}>{item.label}</span>
+                        <span style={{ marginLeft: '10px', fontSize: '15px', fontWeight: 'bold', opacity: isSidebarHovered ? 1 : 0, transition: 'opacity 0.2s' }}>{item.label}</span>
                     </div>
                 ))}
             </nav>
 
             <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, height: '100vh', overflow: 'hidden' }}>
-
-                <header style={{ height: '60px', flexShrink: 0, backgroundColor: '#1e1e1e', borderBottom: '1px solid #333', display: 'flex', alignItems: 'center', padding: '0 20px', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <h2 style={{ color: '#38bdf8', margin: 0, fontSize: '20px' }}>ChessOnline</h2>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                        <span style={{ fontSize: '14px', color: '#10b981', fontWeight: 'bold' }}>
-                            Balance: ${stats.balance?.toFixed(2) || '0.00'}
-                        </span>
-                        <button onClick={handleAddFunds} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>Add Funds</button>
-                        <span style={{ fontSize: '14px', whiteSpace: 'nowrap' }}>Logged in: <b style={{ color: '#38bdf8' }}>{userEmail}</b></span>
-                        <button onClick={onLogout} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>Logout</button>
+                <header style={{ minHeight: '60px', flexShrink: 0, backgroundColor: '#1e1e1e', borderBottom: '1px solid #333', display: 'flex', flexDirection: isMobile ? 'column' : 'row', alignItems: 'center', padding: isMobile ? '10px' : '0 20px', justifyContent: 'space-between', gap: isMobile ? '10px' : '0' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', width: isMobile ? '100%' : 'auto', justifyContent: isMobile ? 'center' : 'flex-start' }}><h2 style={{ color: '#38bdf8', margin: 0, fontSize: '20px' }}>ChessOnline</h2></div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', justifyContent: 'center' }}>
+                        <select value={language} onChange={(e) => setLanguage(e.target.value)} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', padding: '4px 8px', fontSize: '14px', cursor: 'pointer', outline: 'none' }}>
+                            <option value="EN">🇬🇧 EN</option><option value="ES">🇪🇸 ES</option><option value="IT">🇮🇹 IT</option>
+                        </select>
+                        <span style={{ fontSize: '14px', color: '#10b981', fontWeight: 'bold' }}>{t.balance}: ${stats.balance?.toFixed(2) || '0.00'}</span>
+                        <button onClick={handleAddFundsClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{t.addFunds}</button>
+                        <span style={{ fontSize: '14px', whiteSpace: 'nowrap', display: isMobile ? 'none' : 'inline' }}>{t.loggedIn}: <b style={{ color: '#38bdf8' }}>{userEmail.split('@')[0]}</b></span>
+                        <button onClick={onLogout} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>{t.logout}</button>
                     </div>
                 </header>
 
@@ -915,9 +661,7 @@ function ChessGame({ user, onLogout }) {
 
                     {showCommunityChat && (
                         <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '300px' : 'auto', margin: isMobile ? '0 auto' : '0' }}>
-                            <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
-                                🌍 COMMUNITY CHAT
-                            </div>
+                            <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>🌍 {t.communityChat}</div>
                             <div ref={communityContainerRef} style={{ flexGrow: 1, overflowY: 'auto', padding: '10px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 {communityMessages.map((m, i) => (
                                     <div key={i} style={{ backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', fontSize: '11px', wordWrap: 'break-word' }}>
@@ -926,27 +670,25 @@ function ChessGame({ user, onLogout }) {
                                 ))}
                             </div>
                             <form onSubmit={sendCommunityMessage} style={{ display: 'flex', borderTop: '1px solid #333', padding: '10px', flexShrink: 0 }}>
-                                <input id="community-input" type="text" value={communityInput} onChange={e => setCommunityInput(e.target.value)} placeholder="Say something..." style={{ flexGrow: 1, padding: '8px', backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px 0 0 4px', outline: 'none', fontSize: '11px', minWidth: 0 }} />
-                                <button type="submit" style={{ backgroundColor: '#f97316', border: 'none', color: 'white', padding: '0 10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '0 4px 4px 0', fontSize: '11px' }}>Send</button>
+                                <input id="community-input" type="text" value={communityInput} onChange={e => setCommunityInput(e.target.value)} placeholder={t.saySomething} style={{ flexGrow: 1, padding: '8px', backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px 0 0 4px', outline: 'none', fontSize: '11px', minWidth: 0 }} />
+                                <button type="submit" style={{ backgroundColor: '#f97316', border: 'none', color: 'white', padding: '0 10px', fontWeight: 'bold', cursor: 'pointer', borderRadius: '0 4px 4px 0', fontSize: '11px' }}>{t.send}</button>
                             </form>
                         </div>
                     )}
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '560px', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
-
                         {incomingChallenge && (
                             <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
                                 <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)}) for 💰 ${incomingChallenge.wagerAmount}</span>
-                                <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
-                                <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
+                                <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>{t.acceptBtn}</button>
+                                <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>{t.declineBtn}</button>
                             </div>
                         )}
-
                         {incomingDrawOffer && (
                             <div style={{ backgroundColor: '#38bdf8', padding: '10px', borderRadius: '8px', marginBottom: '10px', color: '#000', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
                                 <span>🤝 Opponent offered a Draw!</span>
-                                <button onClick={acceptDraw} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Accept</button>
-                                <button onClick={handleDeclineDraw} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>Decline</button>
+                                <button onClick={acceptDraw} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>{t.acceptBtn}</button>
+                                <button onClick={handleDeclineDraw} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>{t.declineBtn}</button>
                             </div>
                         )}
 
@@ -954,98 +696,73 @@ function ChessGame({ user, onLogout }) {
                             <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'w' ? '#38bdf8' : '#333' }}>⬜ {formatTime(whiteTime)}</div>
                             <div style={{ padding: '5px 15px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'b' ? '#38bdf8' : '#333' }}>⬛ {formatTime(blackTime)}</div>
                         </div>
-                        <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{status}</div>
+                        <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{currentStatusText}</div>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', width: '100%', maxWidth: '100%' }}>
-                            {board}
-                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', width: '100%', maxWidth: '100%' }}>{board}</div>
                     </div>
 
                     <aside style={{ width: '100%', maxWidth: isMobile ? '100%' : '300px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
-
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', textAlign: 'center', width: '100%' }}>
-                                <div style={{ flex: 1 }}><div style={{ color: '#38bdf8', fontSize: '10px' }}>SCORE</div><div style={{ fontSize: '16px' }}>{stats.score}</div></div>
-                                <div style={{ flex: 1 }}><div style={{ color: '#10b981', fontSize: '10px' }}>WON</div><div style={{ fontSize: '16px' }}>{stats.wins}</div></div>
-                                <div style={{ flex: 1 }}><div style={{ color: '#ef4444', fontSize: '10px' }}>LOSS</div><div style={{ fontSize: '16px' }}>{stats.losses}</div></div>
-                                <div style={{ flex: 1 }}><div style={{ color: '#aaa', fontSize: '10px' }}>DRAW</div><div style={{ fontSize: '16px' }}>{stats.draws}</div></div>
+                                <div style={{ flex: 1 }}><div style={{ color: '#38bdf8', fontSize: '10px' }}>{t.score}</div><div style={{ fontSize: '16px' }}>{stats.score}</div></div>
+                                <div style={{ flex: 1 }}><div style={{ color: '#10b981', fontSize: '10px' }}>{t.won}</div><div style={{ fontSize: '16px' }}>{stats.wins}</div></div>
+                                <div style={{ flex: 1 }}><div style={{ color: '#ef4444', fontSize: '10px' }}>{t.loss}</div><div style={{ fontSize: '16px' }}>{stats.losses}</div></div>
+                                <div style={{ flex: 1 }}><div style={{ color: '#aaa', fontSize: '10px' }}>{t.statDraw}</div><div style={{ fontSize: '16px' }}>{stats.draws}</div></div>
                             </div>
                         </div>
 
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
                                 <h4 style={{ color: viewMode === 'tv' ? '#fbbf24' : (viewMode === 'chesscom' ? '#10b981' : '#38bdf8'), margin: 0, fontSize: '12px', textTransform: 'uppercase' }}>
-                                    {viewMode === 'tv' ? 'Lichess TV' : (viewMode === 'chesscom' ? 'Chess.com' : (viewMode === 'online' ? 'ONLINE' : 'MEMBERS'))}
+                                    {viewMode === 'tv' ? 'Lichess TV' : (viewMode === 'chesscom' ? 'Chess.com' : (viewMode === 'online' ? t.online.toUpperCase() : t.members.toUpperCase()))}
                                 </h4>
                                 <select value={viewMode} onChange={(e) => setViewMode(e.target.value)} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '10px', padding: '4px', outline: 'none', cursor: 'pointer' }}>
-                                    <option value="online">Online</option>
-                                    <option value="all">Members</option>
-                                    <option value="tv">Lichess TV</option>
-                                    <option value="chesscom">Chess.com</option>
+                                    <option value="online">{t.online}</option><option value="all">{t.members}</option>
+                                    <option value="tv">Lichess TV</option><option value="chesscom">Chess.com</option>
                                 </select>
                             </div>
-
                             <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
                                 {viewMode === 'online' && (
                                     <div style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                                         <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>TIME:</span>
+                                            <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>{t.time}:</span>
                                             <select value={challengeTime} onChange={(e) => setChallengeTime(Number(e.target.value))} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: 'pointer' }}>
-                                                <option value={600}>10 Mins</option>
-                                                <option value={86400}>1 Day</option>
-                                                <option value={259200}>3 Days</option>
+                                                <option value={600}>10 Mins</option><option value={86400}>1 Day</option><option value={259200}>3 Days</option>
                                             </select>
                                         </div>
                                         <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>WAGER:</span>
-                                            <input
-                                                type="number"
-                                                min="0"
-                                                max={stats.balance || 0}
-                                                value={wagerAmount}
-                                                onChange={(e) => setWagerAmount(Number(e.target.value))}
-                                                style={{ width: '60px', backgroundColor: '#333', color: '#10b981', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none' }}
-                                            />
+                                            <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>{t.wager}:</span>
+                                            <input type="number" min="0" max={stats.balance || 0} value={wagerAmount} onChange={(e) => setWagerAmount(Number(e.target.value))} style={{ width: '60px', backgroundColor: '#333', color: '#10b981', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none' }} />
                                         </div>
                                     </div>
                                 )}
-
                                 {viewMode === 'online' && onlineUsers.map((u, i) => (
                                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span>
-                                        {u.email !== userEmail && <button onClick={() => handleSendChallenge(u.email)} style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#38bdf8', color: '#000', border: 'none', borderRadius: '3px', padding: '2px 5px' }}>Challenge</button>}
+                                        {u.email !== userEmail && <button onClick={() => handleSendChallenge(u.email)} style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#38bdf8', color: '#000', border: 'none', borderRadius: '3px', padding: '2px 5px' }}>{t.challengeBtn}</button>}
                                     </div>
                                 ))}
                                 {viewMode === 'all' && allMembers.map((u, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
-                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span>
-                                    </div>
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span></div>
                                 ))}
                                 {viewMode === 'tv' && tvGames.map((game, i) => (
                                     <a key={i} href={game.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'block' }}>
                                         <div style={{ fontSize: '10px', color: '#fbbf24', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '4px' }}>📺 {game.channel}</div>
-                                        <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
-                                            <span>⬜ {game.white}</span> <span style={{ color: '#888' }}>{game.whiteRating}</span>
-                                        </div>
-                                        <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}>
-                                            <span>⬛ {game.black}</span> <span style={{ color: '#888' }}>{game.blackRating}</span>
-                                        </div>
+                                        <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}><span>⬜ {game.white}</span> <span style={{ color: '#888' }}>{game.whiteRating}</span></div>
+                                        <div style={{ fontSize: '12px', display: 'flex', justifyContent: 'space-between', marginTop: '2px' }}><span>⬛ {game.black}</span> <span style={{ color: '#888' }}>{game.blackRating}</span></div>
                                     </a>
                                 ))}
                                 {viewMode === 'chesscom' && chessComStreamers.map((streamer, i) => (
                                     <a key={i} href={streamer.twitch_url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'flex', alignItems: 'center', gap: '10px' }}>
                                         <img src={streamer.avatar} alt={streamer.username} style={{ width: '30px', height: '30px', borderRadius: '50%' }} />
-                                        <div style={{ overflow: 'hidden' }}>
-                                            <div style={{ fontSize: '12px', fontWeight: 'bold', color: '#10b981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{streamer.username}</div>
-                                            <div style={{ fontSize: '10px', color: '#aaa' }}>Live on Twitch 📺</div>
-                                        </div>
+                                        <div style={{ overflow: 'hidden' }}><div style={{ fontSize: '12px', fontWeight: 'bold', color: '#10b981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{streamer.username}</div><div style={{ fontSize: '10px', color: '#aaa' }}>Live on Twitch 📺</div></div>
                                     </a>
                                 ))}
                             </div>
                         </div>
 
                         <div style={{ backgroundColor: '#1e1e1e', border: '1px solid #333', borderRadius: '8px', display: 'flex', flexDirection: 'column', height: '220px', flexShrink: 0 }}>
-                            <div style={{ padding: '8px', borderBottom: '1px solid #333', fontSize: '12px', color: '#38bdf8', fontWeight: 'bold' }}>GAME CHAT</div>
+                            <div style={{ padding: '8px', borderBottom: '1px solid #333', fontSize: '12px', color: '#38bdf8', fontWeight: 'bold' }}>{t.gameChat}</div>
                             <div ref={chatContainerRef} style={{ flexGrow: 1, overflowY: 'auto', padding: '8px', fontSize: '13px' }}>
                                 {chatMessages.map((m, i) => (
                                     <div key={i} style={{ marginBottom: '8px', textAlign: m.sender === userEmail ? 'right' : 'left' }}>
@@ -1054,40 +771,22 @@ function ChessGame({ user, onLogout }) {
                                 ))}
                             </div>
                             <form onSubmit={sendChatMessage} style={{ display: 'flex', borderTop: '1px solid #333' }}>
-                                <input disabled={!opponent} type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={opponent ? "Type message..." : "Chat locked"} style={{ flexGrow: 1, padding: '10px', backgroundColor: 'transparent', color: 'white', border: 'none', outline: 'none', minWidth: 0 }} />
-                                <button type="submit" style={{ backgroundColor: '#38bdf8', border: 'none', color: 'black', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>Send</button>
+                                <input disabled={!opponent} type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={opponent ? t.typeMessage : t.chatLocked} style={{ flexGrow: 1, padding: '10px', backgroundColor: 'transparent', color: 'white', border: 'none', outline: 'none', minWidth: 0 }} />
+                                <button type="submit" style={{ backgroundColor: '#38bdf8', border: 'none', color: 'black', padding: '0 15px', fontWeight: 'bold', cursor: 'pointer' }}>{t.send}</button>
                             </form>
                         </div>
 
                         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
-                            <button onClick={handleDrawOffer} disabled={(!opponent && !isPlayingComputer) || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>🤝 Draw</button>
-                            <button onClick={handleResign} disabled={(!opponent && !isPlayingComputer) || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>🏳️ Resign</button>
+                            <button onClick={handleDrawOffer} disabled={(!opponent && !isPlayingComputer) || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>{t.actionDraw}</button>
+                            <button onClick={handleResign} disabled={(!opponent && !isPlayingComputer) || isGameOverManually} style={{ flex: 1, padding: '8px', backgroundColor: '#333', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white' }}>{t.actionResign}</button>
                         </div>
 
-                        <button onClick={() => {
-                            setOpponent(null);
-                            setIsPlayingComputer(true);
-                            resetMatch(300);
-                            setStatus("Game started");
-                            speak("Game started");
-                        }} style={{ width: '100%', padding: '10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}>Play Computer</button>
-
-                        <button
-                            onClick={() => setGunshotEnabled(!gunshotEnabled)}
-                            style={{ width: '100%', padding: '10px', backgroundColor: gunshotEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}
-                        >
-                            {gunshotEnabled ? 'Turn off gunshot' : 'Turn on gunshot'}
-                        </button>
-
-                        <button
-                            onClick={() => setSpeakChatEnabled(!speakChatEnabled)}
-                            style={{ width: '100%', padding: '10px', backgroundColor: speakChatEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}
-                        >
-                            {speakChatEnabled ? 'Turn off Chat Speak' : 'Turn on Chat Speak'}
-                        </button>
+                        <button onClick={() => { setOpponent(null); setIsPlayingComputer(true); resetMatch(300); setStatusKey("gameStarted"); setCustomStatus(""); speak(t.gameStarted, language); }} style={{ width: '100%', padding: '10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}>{t.playComputer}</button>
+                        <button onClick={() => setGunshotEnabled(!gunshotEnabled)} style={{ width: '100%', padding: '10px', backgroundColor: gunshotEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}>{gunshotEnabled ? t.turnOffGunshot : t.turnOnGunshot}</button>
+                        <button onClick={() => setSpeakChatEnabled(!speakChatEnabled)} style={{ width: '100%', padding: '10px', backgroundColor: speakChatEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}>{speakChatEnabled ? t.turnOffChatSpeak : t.turnOnChatSpeak}</button>
 
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: '150px', flexShrink: 0 }}>
-                            <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#aaa' }}>HISTORY</h4>
+                            <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#aaa' }}>{t.history}</h4>
                             <div style={{ overflowY: 'auto', flexGrow: 1, fontSize: '12px' }}>
                                 {formattedHistory.map((row, i) => (
                                     <div key={i} style={{ padding: '3px 0', borderBottom: '1px solid #222' }}>
@@ -1107,17 +806,12 @@ function ChessGame({ user, onLogout }) {
                     </aside>
 
                     <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '220px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto', margin: isMobile ? '0 auto' : '0' }}>
-                        <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>
-                            ✈️ TRAVEL DEALS (50)
-                        </div>
+                        <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>{t.travelDeals}</div>
                         <div style={{ flexGrow: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 0 }}>
                             {travelAds.map(ad => (
                                 <a key={ad.id} href={ad.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', borderRadius: '8px', overflow: 'hidden', border: '1px solid #444', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
                                     <img src={ad.img} alt="Travel Destination" loading="lazy" style={{ width: '100%', height: '110px', objectFit: 'cover', backgroundColor: '#444' }} />
-                                    <div style={{ padding: '10px' }}>
-                                        <div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 'bold', marginBottom: '4px' }}>{ad.tag}</div>
-                                        <div style={{ fontSize: '14px', color: 'white', fontWeight: '600' }}>{ad.name}</div>
-                                    </div>
+                                    <div style={{ padding: '10px' }}><div style={{ fontSize: '11px', color: '#38bdf8', fontWeight: 'bold', marginBottom: '4px' }}>{ad.tag}</div><div style={{ fontSize: '14px', color: 'white', fontWeight: '600' }}>{ad.name}</div></div>
                                 </a>
                             ))}
                         </div>
@@ -1125,28 +819,14 @@ function ChessGame({ user, onLogout }) {
 
                 </div>
 
-                <footer style={{
-                    display: 'flex',
-                    flexDirection: isMobile ? 'column' : 'row',
-                    justifyContent: isMobile ? 'center' : 'space-between',
-                    alignItems: 'center',
-                    padding: '15px 30px',
-                    gap: isMobile ? '10px' : '0',
-                    color: '#888',
-                    fontSize: '14px',
-                    borderTop: '1px solid #333',
-                    backgroundColor: '#1e1e1e',
-                    flexShrink: 0
-                }}>
+                <footer style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: isMobile ? 'center' : 'space-between', alignItems: 'center', padding: '15px 30px', gap: isMobile ? '10px' : '0', color: '#888', fontSize: '14px', borderTop: '1px solid #333', backgroundColor: '#1e1e1e', flexShrink: 0 }}>
                     <div>NoirSoft Creation {new Date().getFullYear()}</div>
-
                     <div style={{ display: 'flex', gap: '15px', fontSize: '13px', fontWeight: 'bold', flexWrap: 'wrap', justifyContent: 'center' }}>
-                        <span style={{ color: '#aaa' }}>👥 Members: {allMembers.length}</span>
-                        <span style={{ color: '#10b981' }}>🟢 Online: {onlineUsers.length}</span>
+                        <span style={{ color: '#aaa' }}>👥 {translations.EN.members}: {allMembers.length}</span>
+                        <span style={{ color: '#10b981' }}>🟢 {translations.EN.online}: {onlineUsers.length}</span>
                         <span style={{ color: '#f97316' }}>⚔️ Playing: {onlineUsers.filter(u => u.isPlaying).length}</span>
                     </div>
                 </footer>
-
             </div>
         </div>
     );
@@ -1154,10 +834,15 @@ function ChessGame({ user, onLogout }) {
 
 export default function App() {
     const [currentUser, setCurrentUser] = useState(null);
+    const [language, setLanguage] = useState('EN'); // Centralized Language State
+
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => { if (session) setCurrentUser(session.user); });
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setCurrentUser(s?.user || null));
         return () => subscription.unsubscribe();
     }, []);
-    return currentUser ? <ChessGame user={currentUser} onLogout={() => supabase.auth.signOut()} /> : <AuthScreen onAuthSuccess={setCurrentUser} />;
+
+    return currentUser
+        ? <ChessGame user={currentUser} onLogout={() => supabase.auth.signOut()} language={language} setLanguage={setLanguage} />
+        : <AuthScreen onAuthSuccess={setCurrentUser} language={language} setLanguage={setLanguage} />;
 }
