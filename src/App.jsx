@@ -5,7 +5,46 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import './App.css';
 
-const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY);
+
+// ==========================================
+// 🛡️ BULLETPROOF STRIPE INITIALIZATION
+// ==========================================
+let STRIPE_KEY = 'pk_test_YOUR_STRIPE_PUBLIC_KEY'; // Fallback
+
+// 1. Safely check for environment variables (Supports both Create React App and Vite)
+try {
+    if (typeof process !== 'undefined' && process.env.REACT_APP_STRIPE_PUBLIC_KEY) {
+        STRIPE_KEY = process.env.REACT_APP_STRIPE_PUBLIC_KEY;
+    } else if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
+        STRIPE_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
+    }
+} catch (e) {
+    console.warn("Could not read environment variables, using fallback Stripe key.");
+}
+
+// 2. Prevent loadStripe from crashing the app if the key format is invalid
+let stripePromise = null;
+if (STRIPE_KEY && STRIPE_KEY.startsWith('pk_')) {
+    try {
+        stripePromise = loadStripe(STRIPE_KEY);
+    } catch (error) {
+        console.error("Stripe initialization failed:", error);
+    }
+} else {
+    console.error("🛑 STRIPE ERROR: Invalid Public Key. It must start with 'pk_test_' or 'pk_live_'. Check your .env file!");
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 // ==========================================
@@ -167,30 +206,89 @@ function getBestMove(gameInstance, depth = 2) {
 // 💳 STRIPE CHECKOUT COMPONENT
 // ==========================================
 function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
-    const stripe = useStripe(); const elements = useElements();
-    const [loading, setLoading] = useState(false); const [error, setError] = useState(null);
+    const stripe = useStripe();
+    const elements = useElements();
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+
     const handleSubmit = async (event) => {
-        event.preventDefault(); if (!stripe || !elements) return;
-        setLoading(true); setError(null);
+        event.preventDefault();
+
+        if (!stripe || !elements) {
+            setError("Payment gateway is still loading or failed to connect. Please check your Stripe API Key.");
+            return;
+        }
+
+        setLoading(true);
+        setError(null);
+
         try {
-            const { data, error: backendError } = await supabase.functions.invoke('create-payment', { body: { amount: amount, userId: userId } });
-            if (backendError || !data?.clientSecret) throw new Error("Failed to initialize payment. Ensure your Supabase Edge Function is running.");
-            const result = await stripe.confirmCardPayment(data.clientSecret, { payment_method: { card: elements.getElement(CardElement) } });
-            if (result.error) { setError(result.error.message); }
-            else if (result.paymentIntent.status === 'succeeded') { alert(`Successfully added $${amount.toFixed(2)}!`); onSuccess(amount); }
-        } catch (err) { setError(err.message || "An error occurred during payment."); }
+            const { data, error: backendError } = await supabase.functions.invoke('create-payment', {
+                body: { amount: amount, userId: userId }
+            });
+
+            if (backendError) throw new Error(backendError.message || "Failed to initialize payment.");
+            if (!data?.clientSecret) throw new Error("No secure client secret returned from the server.");
+
+            const result = await stripe.confirmCardPayment(data.clientSecret, {
+                payment_method: { card: elements.getElement(CardElement) }
+            });
+
+            if (result.error) {
+                setError(result.error.message);
+            } else if (result.paymentIntent.status === 'succeeded') {
+                alert(`Successfully added $${amount.toFixed(2)}!`);
+                onSuccess(amount);
+            }
+        } catch (err) {
+            console.error("Payment Debug Error:", err);
+            setError(err.message || "An error occurred during payment. Check console for details.");
+        }
         setLoading(false);
     };
+
     return (
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
             <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '400px', border: '1px solid #333' }}>
                 <h3 style={{ color: '#38bdf8', marginTop: 0, textAlign: 'center' }}>Deposit ${amount.toFixed(2)}</h3>
+
+                {/* Visual warning if Stripe didn't load properly */}
+                {!stripe && (
+                    <div style={{ color: '#fbbf24', fontSize: '13px', marginBottom: '15px', textAlign: 'center', backgroundColor: '#333', padding: '10px', borderRadius: '4px' }}>
+                        Connecting to secure payment gateway...
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit}>
-                    <div style={{ padding: '15px', backgroundColor: '#2c2c2c', borderRadius: '4px', marginBottom: '20px' }}><CardElement options={{ style: { base: { fontSize: '16px', color: '#ffffff', '::placeholder': { color: '#aab7c4' } } } }} /></div>
+                    <div style={{ padding: '15px', backgroundColor: '#2c2c2c', borderRadius: '4px', marginBottom: '20px' }}>
+                        <CardElement options={{ style: { base: { fontSize: '16px', color: '#ffffff', '::placeholder': { color: '#aab7c4' } } } }} />
+                    </div>
+
                     {error && <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '15px', textAlign: 'center' }}>{error}</div>}
+
                     <div style={{ display: 'flex', gap: '10px' }}>
-                        <button type="button" onClick={onCancel} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
-                        <button type="submit" disabled={!stripe || loading} style={{ flex: 1, padding: '12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{loading ? 'Processing...' : `Pay $${amount.toFixed(2)}`}</button>
+                        <button type="button" onClick={onCancel} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
+                            Cancel
+                        </button>
+
+                        {/* Modified visually disabled state */}
+                        <button
+                            type="submit"
+                            disabled={!stripe || loading}
+                            style={{
+                                flex: 1,
+                                padding: '12px',
+                                backgroundColor: '#10b981',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '4px',
+                                cursor: (!stripe || loading) ? 'not-allowed' : 'pointer',
+                                opacity: (!stripe || loading) ? 0.5 : 1,
+                                fontWeight: 'bold'
+                            }}
+                        >
+                            {loading ? 'Processing...' : `Pay $${amount.toFixed(2)}`}
+                        </button>
                     </div>
                 </form>
             </div>
@@ -199,7 +297,7 @@ function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
 }
 
 // ==========================================
-// 🔐 AUTH MODAL (Converted from AuthScreen)
+// 🔐 AUTH MODAL
 // ==========================================
 function AuthModal({ onAuthSuccess, onClose, language }) {
     const t = translations[language];
@@ -333,7 +431,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         fetchTvGames();
         fetchChessComTv();
         fetchCommunityComments();
-    }, [user]); // Re-fetch when user changes
+    }, [user]);
 
     useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatMessages]);
     useEffect(() => { if (showCommunityChat && communityContainerRef.current) communityContainerRef.current.scrollTop = communityContainerRef.current.scrollHeight; }, [communityMessages, showCommunityChat]);
@@ -405,9 +503,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
     };
 
-    // ==========================================
-    // 🔌 INSTANT DISCONNECT ON LOGOUT CLICK
-    // ==========================================
     const handleLogoutClick = async () => {
         if (opponent && !isGameOverManually && lobbyChannel) {
             setIsGameOverManually(true);
@@ -416,14 +511,11 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 event: 'disconnect',
                 payload: { targetEmail: opponentRef.current }
             }).catch(() => { });
-            await recordResult('loss'); // Forfeit the game because you left
+            await recordResult('loss');
         }
-        onLogout(); // Execute Supabase SignOut
+        onLogout();
     };
 
-    // ==========================================
-    // 🔌 INSTANT DISCONNECT ON BROWSER TAB CLOSE
-    // ==========================================
     useEffect(() => {
         const handleTabClose = () => {
             if (opponentRef.current && !isGameOverManually && lobbyChannel) {
@@ -493,8 +585,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 if (userEmail && payload.targetEmail === userEmail) { setIsGameOverManually(true); setStatusKey("drawAccepted"); setCustomStatus(""); speak(t.drawAccepted, language); recordResult('draw'); }
             })
             .on('broadcast', { event: 'drawDeclined' }, ({ payload }) => { if (userEmail && payload.targetEmail === userEmail) { setStatusKey("drawDeclined"); setCustomStatus(""); setIncomingDrawOffer(false); } })
-
-            // Explicit disconnect payload receiver
             .on('broadcast', { event: 'disconnect' }, ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail && !isGameOverManually) {
                     setIsGameOverManually(true);
@@ -521,18 +611,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         };
     }, [userEmail, isGameOverManually, language, t]);
 
-    // ==========================================
-    // 🔌 STRICT OPPONENT DISCONNECT CHECK WITH DELAY
-    // ==========================================
     useEffect(() => {
         if (opponent && !isGameOverManually) {
-            // First pass: Are they online and actively playing?
             const isOpponentInGame = onlineUsers.some(u => u.email === opponent && u.isPlaying);
 
             if (!isOpponentInGame) {
-                // If they drop out, wait exactly 3 seconds to see if it's a momentary network blip or race condition
                 const checkTimeout = setTimeout(() => {
-                    // Check the absolute latest data after 3 seconds
                     const stillOffline = !onlineUsersRef.current.some(u => u.email === opponent && u.isPlaying);
 
                     if (stillOffline && !isGameOverManually) {
@@ -544,7 +628,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     }
                 }, 3000);
 
-                // If onlineUsers updates within those 3 seconds (e.g. they reconnect), cancel the forfeit penalty!
                 return () => clearTimeout(checkTimeout);
             }
         }
@@ -594,7 +677,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const sendChatMessage = async (e) => {
         e.preventDefault();
-        if (!user) return; // Prevent guests
+        if (!user) return;
         if (!chatInput.trim() || !opponent) return;
         await lobbyChannel.send({ type: 'broadcast', event: 'chat', payload: { targetEmail: opponent, senderEmail: userEmail, text: chatInput } });
         setChatMessages(prev => [...prev, { text: chatInput, sender: userEmail }]); setChatInput('');
@@ -631,7 +714,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     };
 
     const handleResign = () => {
-        if (!user) return; // Guests can't resign
+        if (!user) return;
         if (isGameOverManually || (!opponent && !isPlayingComputer)) return;
         if (window.confirm("Are you sure you want to resign?")) {
             setIsGameOverManually(true); setStatusKey("youResigned"); setCustomStatus(""); speak(t.youResigned, language); recordResult('loss');
