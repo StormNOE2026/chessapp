@@ -5,13 +5,12 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import './App.css';
 
-
 // ==========================================
 // 🛡️ BULLETPROOF STRIPE INITIALIZATION
 // ==========================================
 let STRIPE_KEY = 'pk_test_YOUR_STRIPE_PUBLIC_KEY'; // Fallback
 
-// 1. Safely check for environment variables (Supports both Create React App and Vite)
+// 1. Safely check for environment variables
 try {
     if (typeof process !== 'undefined' && process.env.REACT_APP_STRIPE_PUBLIC_KEY) {
         STRIPE_KEY = process.env.REACT_APP_STRIPE_PUBLIC_KEY;
@@ -34,19 +33,6 @@ if (STRIPE_KEY && STRIPE_KEY.startsWith('pk_')) {
     console.error("🛑 STRIPE ERROR: Invalid Public Key. It must start with 'pk_test_' or 'pk_live_'. Check your .env file!");
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 // ==========================================
 // 🌍 TRANSLATIONS DICTIONARY
 // ==========================================
@@ -59,7 +45,7 @@ const translations = {
         turnOffChatSpeak: "Turn off Chat Speak", turnOnChatSpeak: "Turn on Chat Speak",
         score: "SCORE", won: "WON", loss: "LOSS", statDraw: "DRAW", history: "HISTORY",
         gameChat: "GAME CHAT", chatLocked: "Chat locked", typeMessage: "Type message...",
-        travelDeals: "✈️ TRAVEL DEALS (50)", menu: "MENU", coach: "Coach", watch: "Watch",
+        travelDeals: "✈️ TRAVEL DEALS", menu: "MENU", coach: "Coach", watch: "Watch",
         news: "News", community: "Community", online: "Online", members: "Members",
         time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline",
         welcomeBack: "Welcome Back", createAccount: "Create Account", signupFree: "Signup for free and play chess for free.",
@@ -140,15 +126,8 @@ const speak = (text, langCode = 'EN') => {
 };
 
 // ==========================================
-// ✈️ TRAVEL ADS DATA & 🧠 AI ENGINE
+// 🧠 CHESS AI ENGINE
 // ==========================================
-const cities = ["Paris", "London", "Tokyo", "Bali", "NYC", "Dubai", "Rome", "Swiss Alps", "Maldives", "Sydney", "Barcelona", "Santorini", "Bangkok", "Iceland", "Cairo", "Venice", "Rio", "Kyoto", "Amsterdam", "Prague", "Cape Town", "Machu Picchu", "Lisbon", "Seoul", "Bora Bora", "Hawaii", "Fiji", "Phuket", "Maui", "Florence", "Vienna", "Berlin", "Dublin", "Istanbul", "Marrakech", "Mexico City", "Toronto", "Vancouver", "Singapore", "Hong Kong", "Las Vegas", "LA", "Miami", "Orlando", "New Orleans", "SF", "Austin", "Chicago", "Boston", "Seattle"];
-const travelAds = cities.map((city, i) => ({
-    id: i, name: `${i % 2 === 0 ? 'Grand Hotel' : 'Luxury Flight'} ${city}`,
-    url: i % 2 === 0 ? "https://www.booking.com" : "https://www.skyscanner.com",
-    img: `https://picsum.photos/seed/${city}/300/200`, tag: i % 2 === 0 ? "HOTEL" : "FLIGHT"
-}));
-
 const pieceValues = { p: 10, n: 30, b: 30, r: 50, q: 90, k: 900 };
 function evaluateBoard(gameInstance) {
     let totalEval = 0;
@@ -252,7 +231,6 @@ function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
             <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '400px', border: '1px solid #333' }}>
                 <h3 style={{ color: '#38bdf8', marginTop: 0, textAlign: 'center' }}>Deposit ${amount.toFixed(2)}</h3>
 
-                {/* Visual warning if Stripe didn't load properly */}
                 {!stripe && (
                     <div style={{ color: '#fbbf24', fontSize: '13px', marginBottom: '15px', textAlign: 'center', backgroundColor: '#333', padding: '10px', borderRadius: '4px' }}>
                         Connecting to secure payment gateway...
@@ -270,8 +248,6 @@ function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
                         <button type="button" onClick={onCancel} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
                             Cancel
                         </button>
-
-                        {/* Modified visually disabled state */}
                         <button
                             type="submit"
                             disabled={!stripe || loading}
@@ -408,6 +384,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [depositAmount, setDepositAmount] = useState(10);
 
+    // Dynamic travel ads state based on user geolocation
+    const [travelAds, setTravelAds] = useState([]);
+
     useEffect(() => { gunshotEnabledRef.current = gunshotEnabled; speakChatEnabledRef.current = speakChatEnabled; }, [gunshotEnabled, speakChatEnabled]);
     useEffect(() => { onlineUsersRef.current = onlineUsers; }, [onlineUsers]);
 
@@ -432,6 +411,46 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         fetchChessComTv();
         fetchCommunityComments();
     }, [user]);
+
+    // GEOLOCATION ADS INJECTION
+    useEffect(() => {
+        const fetchLocationAndSetAds = async () => {
+            const regionalCities = {
+                ES: ["Madrid", "Barcelona", "Seville", "Valencia", "Ibiza", "Malaga", "Bilbao", "Granada", "Alicante", "Cordoba", "Toledo", "Zaragoza", "Mallorca", "Tenerife", "San Sebastian", "Salamanca", "Santiago", "Segovia", "Girona", "Marbella"],
+                US: ["NYC", "LA", "Miami", "Orlando", "Las Vegas", "Chicago", "Austin", "Seattle", "SF", "Boston", "Denver", "Nashville", "New Orleans", "San Diego", "Atlanta", "Portland", "Houston", "Phoenix", "Dallas", "Honolulu"],
+                IT: ["Rome", "Venice", "Florence", "Milan", "Naples", "Amalfi", "Sicily", "Turin", "Bologna", "Verona", "Genoa", "Pisa", "Siena", "Como", "Capri", "Cinque Terre", "Sardinia", "Pompeii", "Lucca", "Sorrento"],
+                GB: ["London", "Edinburgh", "Manchester", "Birmingham", "Glasgow", "Liverpool", "Bristol", "Oxford", "Cambridge", "York", "Bath", "Cardiff", "Belfast", "Newcastle", "Brighton", "Inverness", "Leeds", "Nottingham", "Sheffield", "Aberdeen"],
+                DEFAULT: ["Paris", "London", "Tokyo", "Bali", "NYC", "Dubai", "Rome", "Swiss Alps", "Maldives", "Sydney", "Barcelona", "Santorini", "Bangkok", "Iceland", "Cairo", "Venice", "Rio", "Kyoto", "Amsterdam", "Prague"]
+            };
+
+            let countryCode = 'DEFAULT';
+            try {
+                const res = await fetch('https://ipapi.co/json/');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (regionalCities[data.country_code]) {
+                        countryCode = data.country_code;
+                    }
+                }
+            } catch (error) {
+                console.warn("Could not determine user location dynamically. Using default ad distributions.");
+            }
+
+            const citiesToUse = regionalCities[countryCode] || regionalCities.DEFAULT;
+
+            const generatedAds = citiesToUse.map((city, i) => ({
+                id: i,
+                name: `${i % 2 === 0 ? 'Grand Hotel' : 'Luxury Flight'} ${city}`,
+                url: i % 2 === 0 ? "https://www.booking.com" : "https://www.skyscanner.com",
+                img: `https://picsum.photos/seed/${city.replace(/\s+/g, '')}/300/200`,
+                tag: i % 2 === 0 ? "HOTEL" : "FLIGHT"
+            }));
+
+            setTravelAds(generatedAds);
+        };
+
+        fetchLocationAndSetAds();
+    }, []);
 
     useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatMessages]);
     useEffect(() => { if (showCommunityChat && communityContainerRef.current) communityContainerRef.current.scrollTop = communityContainerRef.current.scrollHeight; }, [communityMessages, showCommunityChat]);
@@ -1032,7 +1051,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     </aside>
 
                     <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '220px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto', margin: isMobile ? '0 auto' : '0' }}>
-                        <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>{t.travelDeals}</div>
+                        <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>{t.travelDeals} ({travelAds.length})</div>
                         <div style={{ flexGrow: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 0 }}>
                             {travelAds.map(ad => (
                                 <a key={ad.id} href={ad.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', borderRadius: '8px', overflow: 'hidden', border: '1px solid #444', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
