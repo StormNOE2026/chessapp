@@ -5,8 +5,8 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import './App.css';
 
-// Initialize Stripe (Replace 'pk_test_...' with your actual public key)
-const stripePromise = loadStripe('pk_test_YOUR_STRIPE_PUBLIC_KEY');
+const stripePromise = loadStripe(process.env.REACT_APP_STRIPE_PUBLIC_KEY);
+
 
 // ==========================================
 // 🌍 TRANSLATIONS DICTIONARY
