@@ -30,7 +30,8 @@ const translations = {
         waiting: "🔴 Waiting...", timeOut: "Time Out!", checkmate: "Checkmate!",
         gameIsDraw: "The game is a Draw!", youWin: "You Win!", youLose: "You Lose!",
         opponentResigned: "Opponent resigned. You Win!", youResigned: "You resigned. You Lose!",
-        drawOfferSent: "Draw offer sent...", drawAccepted: "Draw Accepted!", drawDeclined: "Draw offer declined."
+        drawOfferSent: "Draw offer sent...", drawAccepted: "Draw Accepted!", drawDeclined: "Draw offer declined.",
+        opponentDisconnected: "Opponent disconnected. You Win!"
     },
     ES: {
         balance: "Saldo", addFunds: "Añadir Fondos", loggedIn: "Conectado", logout: "Salir",
@@ -50,7 +51,8 @@ const translations = {
         waiting: "🔴 Esperando...", timeOut: "¡Tiempo agotado!", checkmate: "¡Jaque mate!",
         gameIsDraw: "¡El juego es un empate!", youWin: "¡Tú ganas!", youLose: "¡Pierdes!",
         opponentResigned: "El oponente se rindió. ¡Tú ganas!", youResigned: "Te rendiste. ¡Pierdes!",
-        drawOfferSent: "Oferta de empate enviada...", drawAccepted: "¡Empate aceptado!", drawDeclined: "Oferta de empate rechazada."
+        drawOfferSent: "Oferta de empate enviada...", drawAccepted: "¡Empate aceptado!", drawDeclined: "Oferta de empate rechazada.",
+        opponentDisconnected: "El oponente se desconectó. ¡Tú ganas!"
     },
     IT: {
         balance: "Saldo", addFunds: "Aggiungi Fondi", loggedIn: "Connesso", logout: "Esci",
@@ -70,7 +72,8 @@ const translations = {
         waiting: "🔴 In attesa...", timeOut: "Tempo scaduto!", checkmate: "Scacco matto!",
         gameIsDraw: "Il gioco è patta!", youWin: "Hai Vinto!", youLose: "Hai Perso!",
         opponentResigned: "L'avversario ha abbandonato. Hai Vinto!", youResigned: "Hai abbandonato. Hai Perso!",
-        drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata."
+        drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata.",
+        opponentDisconnected: "Avversario disconnesso. Hai Vinto!"
     }
 };
 
@@ -393,13 +396,42 @@ function ChessGame({ user, onLogout, language, setLanguage }) {
         setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
     };
 
+    // ==========================================
+    // 🔌 INSTANT DISCONNECT ON BROWSER TAB CLOSE
+    // ==========================================
+    useEffect(() => {
+        const handleTabClose = () => {
+            if (opponentRef.current && !isGameOverManually && lobbyChannel) {
+                lobbyChannel.send({
+                    type: 'broadcast',
+                    event: 'disconnect',
+                    payload: { targetEmail: opponentRef.current }
+                }).catch(() => { });
+            }
+        };
+
+        window.addEventListener('beforeunload', handleTabClose);
+        return () => window.removeEventListener('beforeunload', handleTabClose);
+    }, [lobbyChannel, isGameOverManually]);
+
     useEffect(() => {
         const channel = supabase.channel('chess-lobby'); setLobbyChannel(channel);
         channel
             .on('presence', { event: 'sync' }, () => {
-                const state = channel.presenceState(); const active = [];
-                for (const key in state) { state[key].forEach(p => active.push(p)); }
-                setOnlineUsers(active);
+                const state = channel.presenceState();
+
+                // === FIX 1: Map Deduplication (prioritizes active games) ===
+                const userMap = new Map();
+                for (const key in state) {
+                    state[key].forEach(p => {
+                        if (p.email) {
+                            if (!userMap.has(p.email) || p.isPlaying) {
+                                userMap.set(p.email, p);
+                            }
+                        }
+                    });
+                }
+                setOnlineUsers(Array.from(userMap.values()));
             })
             .on('broadcast', { event: 'challenge' }, ({ payload }) => {
                 if (payload.targetEmail === userEmail) setIncomingChallenge({ email: payload.challengerEmail, timeControl: payload.timeControl, wagerAmount: payload.wagerAmount || 0 });
@@ -438,13 +470,45 @@ function ChessGame({ user, onLogout, language, setLanguage }) {
                 if (payload.targetEmail === userEmail) { setIsGameOverManually(true); setStatusKey("drawAccepted"); setCustomStatus(""); speak(t.drawAccepted, language); recordResult('draw'); }
             })
             .on('broadcast', { event: 'drawDeclined' }, ({ payload }) => { if (payload.targetEmail === userEmail) { setStatusKey("drawDeclined"); setCustomStatus(""); setIncomingDrawOffer(false); } })
+            .on('broadcast', { event: 'disconnect' }, ({ payload }) => {
+                if (payload.targetEmail === userEmail && !isGameOverManually) {
+                    setIsGameOverManually(true);
+                    setStatusKey("opponentDisconnected");
+                    setCustomStatus("");
+                    speak(t.opponentDisconnected, language);
+                    recordResult('win');
+                }
+            })
             .subscribe(async (s) => { if (s === 'SUBSCRIBED') await channel.track({ email: userEmail, socketId: mySocketId.current, isPlaying: !!(opponent || isPlayingComputer) }); });
 
         const commentsSub = supabase.channel('custom-all-comments').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'comments' }, payload => {
             setCommunityMessages(prev => prev.find(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
         }).subscribe();
-        return () => { supabase.removeChannel(channel); supabase.removeChannel(commentsSub); };
+
+        return () => {
+            channel.untrack();
+            supabase.removeChannel(channel);
+            supabase.removeChannel(commentsSub);
+        };
     }, [userEmail, isGameOverManually, language, t]);
+
+    // ==========================================
+    // 🔌 HANDLE OPPONENT DISCONNECT (TIMEOUT/PRESENCE)
+    // ==========================================
+    useEffect(() => {
+        if (opponent && !isGameOverManually) {
+            // === FIX 2: Relaxed Check to prevent race condition ===
+            const isOpponentOnline = onlineUsers.some(u => u.email === opponent);
+
+            if (!isOpponentOnline) {
+                setIsGameOverManually(true);
+                setStatusKey("opponentDisconnected");
+                setCustomStatus("");
+                speak(t.opponentDisconnected, language);
+                recordResult('win');
+            }
+        }
+    }, [onlineUsers, opponent, isGameOverManually, language, t]);
 
     useEffect(() => {
         if (lobbyChannel) lobbyChannel.track({ email: userEmail, socketId: mySocketId.current, isPlaying: !!(opponent || isPlayingComputer) }).catch(() => { });
@@ -586,7 +650,6 @@ function ChessGame({ user, onLogout, language, setLanguage }) {
         return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
     };
 
-    // --- Helper function to determine Player Names for Timers ---
     const getPlayerName = (color) => {
         if (!opponent && !isPlayingComputer) return "Waiting...";
         if (playerColor === color) return `${userEmail.split('@')[0]} (You)`;
@@ -595,7 +658,6 @@ function ChessGame({ user, onLogout, language, setLanguage }) {
 
     const whitePlayerName = getPlayerName('w');
     const blackPlayerName = getPlayerName('b');
-    // -------------------------------------------------------------
 
     const formattedHistory = [];
     for (let i = 0; i < moveHistory.length; i += 2) { formattedHistory.push({ turn: Math.floor(i / 2) + 1, w: moveHistory[i], b: moveHistory[i + 1] || '' }); }
