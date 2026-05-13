@@ -47,6 +47,7 @@ const translations = {
         gameChat: "GAME CHAT", chatLocked: "Chat locked", typeMessage: "Type message...",
         travelDeals: "✈️ TRAVEL DEALS", menu: "MENU", coach: "Coach", watch: "Watch",
         news: "News", community: "Community", online: "Online", members: "Members",
+        gamesPlayed: "Games Played", replayMode: "REPLAY MODE",
         time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline",
         welcomeBack: "Welcome Back", createAccount: "Create Account", signupFree: "Signup for free and play chess for free.",
         email: "Email", password: "Password", login: "Log In", signup: "Sign Up",
@@ -68,6 +69,7 @@ const translations = {
         gameChat: "CHAT DE JUEGO", chatLocked: "Chat bloqueado", typeMessage: "Escribe un mensaje...",
         travelDeals: "✈️ OFERTAS DE VIAJE", menu: "MENÚ", coach: "Entrenador", watch: "Ver",
         news: "Noticias", community: "Comunidad", online: "En línea", members: "Miembros",
+        gamesPlayed: "Partidas Jugadas", replayMode: "MODO REPETICIÓN",
         time: "TIEMPO", wager: "APUESTA", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar",
         welcomeBack: "Bienvenido", createAccount: "Crear Cuenta", signupFree: "Regístrate gratis, juega gratis.",
         email: "Correo", password: "Contraseña", login: "Iniciar Sesión", signup: "Registrarse",
@@ -89,6 +91,7 @@ const translations = {
         gameChat: "CHAT DI GIOCO", chatLocked: "Chat bloccata", typeMessage: "Scrivi messaggio...",
         travelDeals: "✈️ OFFERTE VIAGGIO", menu: "MENU", coach: "Allenatore", watch: "Guarda",
         news: "Notizie", community: "Comunità", online: "Online", members: "Membri",
+        gamesPlayed: "Partite Giocate", replayMode: "MODALITÀ REPLAY",
         time: "TEMPO", wager: "PUNTATA", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta",
         welcomeBack: "Bentornato", createAccount: "Crea Account", signupFree: "Iscriviti e gioca gratis.",
         email: "Email", password: "Password", login: "Accedi", signup: "Iscriviti",
@@ -365,6 +368,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [communityInput, setCommunityInput] = useState('');
     const communityContainerRef = useRef(null);
 
+    // Games Played State
+    const [showGamesPlayed, setShowGamesPlayed] = useState(false);
+    const [gamesHistoryList, setGamesHistoryList] = useState([]);
+    const [isLoadingGames, setIsLoadingGames] = useState(false);
+    const [replayInfo, setReplayInfo] = useState(null);
+
     const [opponent, setOpponent] = useState(null);
     const [playerColor, setPlayerColor] = useState('w');
     const [whiteTime, setWhiteTime] = useState(300);
@@ -386,6 +395,19 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     // Dynamic travel ads state based on user geolocation
     const [travelAds, setTravelAds] = useState([]);
+
+    // REFS FOR PREVENTING STALE CLOSURES IN SOCKETS
+    const moveHistoryRef = useRef([]);
+    useEffect(() => { moveHistoryRef.current = moveHistory; }, [moveHistory]);
+
+    const playerColorRef = useRef('w');
+    useEffect(() => { playerColorRef.current = playerColor; }, [playerColor]);
+
+    const currentStakeRef = useRef(0);
+    useEffect(() => { currentStakeRef.current = currentStake; }, [currentStake]);
+
+    const isGameOverManuallyRef = useRef(false);
+    useEffect(() => { isGameOverManuallyRef.current = isGameOverManually; }, [isGameOverManually]);
 
     useEffect(() => { gunshotEnabledRef.current = gunshotEnabled; speakChatEnabledRef.current = speakChatEnabled; }, [gunshotEnabled, speakChatEnabled]);
     useEffect(() => { onlineUsersRef.current = onlineUsers; }, [onlineUsers]);
@@ -461,6 +483,57 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (data) setStats({ wins: data.wins || 0, losses: data.losses || 0, draws: data.draws || 0, score: data.score !== undefined ? data.score : 100, balance: data.balance || 0 });
     };
 
+    const fetchGamesHistory = async () => {
+        setIsLoadingGames(true);
+        const { data, error } = await supabase
+            .from('games')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(100);
+
+        if (!error && data) {
+            setGamesHistoryList(data);
+        } else if (error) {
+            console.error("Error fetching games:", error);
+        }
+        setIsLoadingGames(false);
+    };
+
+    const saveGameToDb = async (type, reason) => {
+        const currentMoves = moveHistoryRef.current;
+        const color = playerColorRef.current;
+
+        // 1. Guardrail: Ignore games where no moves were ever made
+        if (!currentMoves || currentMoves.length === 0) return;
+
+        let resultText = 'Draw';
+        if (type === 'win') {
+            resultText = `${color === 'w' ? 'White' : 'Black'} won by ${reason}`;
+        } else if (type === 'loss') {
+            resultText = `${color === 'w' ? 'Black' : 'White'} won by ${reason}`;
+        } else {
+            resultText = `Draw by ${reason}`;
+        }
+
+        // 2. Determine who should be responsible for saving to avoid duplicate Supabase rows
+        const whiteFailedToFinish = (color === 'b' && (reason === 'Abandonment' || reason === 'Resignation' || reason === 'Timeout'));
+
+        if (color === 'w' || isPlayingComputer || whiteFailedToFinish) {
+            const opponentName = isPlayingComputer ? 'Computer' : (opponentRef.current || 'Guest');
+
+            try {
+                await supabase.from('games').insert([{
+                    white_email: color === 'w' ? (userEmail || 'Guest') : opponentName,
+                    black_email: color === 'b' ? (userEmail || 'Guest') : opponentName,
+                    moves: currentMoves,
+                    result: resultText
+                }]);
+            } catch (err) {
+                console.error("Could not save game", err);
+            }
+        }
+    };
+
     const handleAddFundsClick = () => {
         const amountStr = prompt("Enter amount to deposit ($):", "10.00");
         if (!amountStr) return; const amount = parseFloat(amountStr);
@@ -505,12 +578,14 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setTimeout(() => setExplosion(null), 1000);
     };
 
-    const recordResult = async (type) => {
+    const recordResult = async (type, reason = 'Unknown') => {
+        saveGameToDb(type, reason);
         if (!user) return; // Guests do not record results
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         const updates = { ...data, score: data?.score || 100, balance: data?.balance || 0 };
-        if (type === 'win') { updates.wins += 1; updates.score += 8; updates.balance += currentStake; }
-        if (type === 'loss') { updates.losses += 1; updates.score -= 8; updates.balance -= currentStake; }
+        const stake = currentStakeRef.current;
+        if (type === 'win') { updates.wins += 1; updates.score += 8; updates.balance += stake; }
+        if (type === 'loss') { updates.losses += 1; updates.score -= 8; updates.balance -= stake; }
         if (type === 'draw') { updates.draws += 1; }
         await supabase.from('profiles').update({ wins: updates.wins, losses: updates.losses, draws: updates.draws, score: updates.score, balance: updates.balance }).eq('id', user.id);
         setStats(updates); setCurrentStake(0);
@@ -520,6 +595,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         gameRef.current = new Chess(); setMoveHistory([]); setCurrentMoveIndex(0);
         setWhiteTime(timeControl); setBlackTime(timeControl); setMoveFrom('');
         setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
+        setReplayInfo(null);
     };
 
     const handleLogoutClick = async () => {
@@ -530,14 +606,14 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 event: 'disconnect',
                 payload: { targetEmail: opponentRef.current }
             }).catch(() => { });
-            await recordResult('loss');
+            await recordResult('loss', 'Abandonment');
         }
         onLogout();
     };
 
     useEffect(() => {
         const handleTabClose = () => {
-            if (opponentRef.current && !isGameOverManually && lobbyChannel) {
+            if (opponentRef.current && !isGameOverManuallyRef.current && lobbyChannel) {
                 lobbyChannel.send({
                     type: 'broadcast',
                     event: 'disconnect',
@@ -548,7 +624,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
         window.addEventListener('beforeunload', handleTabClose);
         return () => window.removeEventListener('beforeunload', handleTabClose);
-    }, [lobbyChannel, isGameOverManually]);
+    }, [lobbyChannel]);
 
     useEffect(() => {
         const channel = supabase.channel('chess-lobby'); setLobbyChannel(channel);
@@ -595,22 +671,22 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 }
             })
             .on('broadcast', { event: 'resign' }, ({ payload }) => {
-                if (userEmail && payload.targetEmail === userEmail && !isGameOverManually) {
-                    setIsGameOverManually(true); setStatusKey("opponentResigned"); setCustomStatus(""); speak(t.opponentResigned, language); recordResult('win');
+                if (userEmail && payload.targetEmail === userEmail && !isGameOverManuallyRef.current) {
+                    setIsGameOverManually(true); setStatusKey("opponentResigned"); setCustomStatus(""); speak(t.opponentResigned, language); recordResult('win', 'Resignation');
                 }
             })
             .on('broadcast', { event: 'drawOffer' }, ({ payload }) => { if (userEmail && payload.targetEmail === userEmail) setIncomingDrawOffer(true); })
             .on('broadcast', { event: 'drawAccepted' }, ({ payload }) => {
-                if (userEmail && payload.targetEmail === userEmail) { setIsGameOverManually(true); setStatusKey("drawAccepted"); setCustomStatus(""); speak(t.drawAccepted, language); recordResult('draw'); }
+                if (userEmail && payload.targetEmail === userEmail) { setIsGameOverManually(true); setStatusKey("drawAccepted"); setCustomStatus(""); speak(t.drawAccepted, language); recordResult('draw', 'Agreement'); }
             })
             .on('broadcast', { event: 'drawDeclined' }, ({ payload }) => { if (userEmail && payload.targetEmail === userEmail) { setStatusKey("drawDeclined"); setCustomStatus(""); setIncomingDrawOffer(false); } })
             .on('broadcast', { event: 'disconnect' }, ({ payload }) => {
-                if (userEmail && payload.targetEmail === userEmail && !isGameOverManually) {
+                if (userEmail && payload.targetEmail === userEmail && !isGameOverManuallyRef.current) {
                     setIsGameOverManually(true);
                     setStatusKey("opponentDisconnected");
                     setCustomStatus("");
                     speak(t.opponentDisconnected, language);
-                    recordResult('win');
+                    recordResult('win', 'Abandonment');
                 }
             })
             .subscribe(async (s) => {
@@ -628,7 +704,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             supabase.removeChannel(channel);
             supabase.removeChannel(commentsSub);
         };
-    }, [userEmail, isGameOverManually, language, t]);
+    }, [userEmail, language]); // Notice we removed isGameOverManually to avoid tearing down the socket during game-over events
 
     useEffect(() => {
         if (opponent && !isGameOverManually) {
@@ -638,12 +714,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 const checkTimeout = setTimeout(() => {
                     const stillOffline = !onlineUsersRef.current.some(u => u.email === opponent && u.isPlaying);
 
-                    if (stillOffline && !isGameOverManually) {
+                    if (stillOffline && !isGameOverManuallyRef.current) {
                         setIsGameOverManually(true);
                         setStatusKey("opponentDisconnected");
                         setCustomStatus("");
                         speak(t.opponentDisconnected, language);
-                        recordResult('win');
+                        recordResult('win', 'Abandonment');
                     }
                 }, 3000);
 
@@ -670,7 +746,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (!isGameOverManually && (whiteTime === 0 || blackTime === 0)) {
             setIsGameOverManually(true); const winnerColor = whiteTime === 0 ? "b" : "w";
             setStatusKey("timeOut"); setCustomStatus(` ${playerColor === winnerColor ? t.youWin : t.youLose}`);
-            speak(t.timeOut, language); recordResult(playerColor === winnerColor ? 'win' : 'loss');
+            speak(t.timeOut, language); recordResult(playerColor === winnerColor ? 'win' : 'loss', 'Timeout');
         }
     }, [whiteTime, blackTime, isGameOverManually, playerColor, language, t]);
 
@@ -682,11 +758,11 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 setIsGameOverManually(true); speak(t.checkmate, language);
                 new Audio(sounds.thunder).play().catch(() => { });
                 if (gunshotEnabledRef.current) { for (let i = 0; i < 3; i++) setTimeout(() => new Audio('/shotgun.mp3').play().catch(() => { }), i * 400); }
-                recordResult(playerColor === loserColor ? 'loss' : 'win');
+                recordResult(playerColor === loserColor ? 'loss' : 'win', 'Checkmate');
             }
         } else if (displayGame.isDraw()) {
             setStatusKey("gameIsDraw"); setCustomStatus("");
-            if (!isGameOverManually) { setIsGameOverManually(true); speak(t.gameIsDraw, language); recordResult('draw'); }
+            if (!isGameOverManually) { setIsGameOverManually(true); speak(t.gameIsDraw, language); recordResult('draw', 'Stalemate / Rules'); }
         } else if (!isGameOverManually && (opponent || isPlayingComputer)) {
             const isMyTurn = displayGame.turn() === playerColor;
             const newStatusKey = isMyTurn ? "yourTurn" : "waiting";
@@ -736,7 +812,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (!user) return;
         if (isGameOverManually || (!opponent && !isPlayingComputer)) return;
         if (window.confirm("Are you sure you want to resign?")) {
-            setIsGameOverManually(true); setStatusKey("youResigned"); setCustomStatus(""); speak(t.youResigned, language); recordResult('loss');
+            setIsGameOverManually(true); setStatusKey("youResigned"); setCustomStatus(""); speak(t.youResigned, language); recordResult('loss', 'Resignation');
             if (opponent) lobbyChannel.send({ type: 'broadcast', event: 'resign', payload: { targetEmail: opponentRef.current } });
         }
     };
@@ -745,7 +821,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (!user) return;
         if (isGameOverManually || (!opponent && !isPlayingComputer)) return;
         if (opponent) { lobbyChannel.send({ type: 'broadcast', event: 'drawOffer', payload: { targetEmail: opponent } }); setStatusKey("drawOfferSent"); setCustomStatus(""); }
-        else if (isPlayingComputer) { setIsGameOverManually(true); setStatusKey(""); setCustomStatus("Computer accepts the draw!"); speak("Computer accepts the draw", language); recordResult('draw'); }
+        else if (isPlayingComputer) { setIsGameOverManually(true); setStatusKey(""); setCustomStatus("Computer accepts the draw!"); speak("Computer accepts the draw", language); recordResult('draw', 'Agreement'); }
     };
 
     const handleDeclineDraw = () => {
@@ -754,7 +830,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     };
 
     const acceptDraw = () => {
-        setIsGameOverManually(true); setStatusKey("drawAccepted"); setCustomStatus(""); speak(t.drawAccepted, language); recordResult('draw'); setIncomingDrawOffer(false);
+        setIsGameOverManually(true); setStatusKey("drawAccepted"); setCustomStatus(""); speak(t.drawAccepted, language); recordResult('draw', 'Agreement'); setIncomingDrawOffer(false);
         if (opponent && userEmail) lobbyChannel.send({ type: 'broadcast', event: 'drawAccepted', payload: { targetEmail: opponentRef.current } });
     };
 
@@ -843,10 +919,19 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const sideMenuItems = [
         { icon: '👨‍🏫', label: t.coach }, { icon: '👁️', label: t.watch },
-        { icon: '📰', label: t.news }, { icon: '👥', label: t.community }
+        { icon: '📰', label: t.news }, { icon: '👥', label: t.community },
+        { icon: '🕹️', label: t.gamesPlayed }
     ];
 
-    const currentStatusText = statusKey ? t[statusKey] + customStatus : customStatus;
+    // Determine the current status text to display above the board
+    let currentStatusText = statusKey ? t[statusKey] + customStatus : customStatus;
+    if (replayInfo) {
+        if (currentMoveIndex === moveHistory.length) {
+            currentStatusText = `🏁 Game Over: ${replayInfo.result?.toUpperCase()}`;
+        } else {
+            currentStatusText = `🔄 ${t.replayMode} - Move ${currentMoveIndex} / ${moveHistory.length}`;
+        }
+    }
 
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
@@ -854,6 +939,48 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
             {/* ONLY show Stripe elements if user exists to prevent crashes */}
             {showPaymentModal && user && <Elements stripe={stripePromise}><CheckoutForm amount={depositAmount} userId={user.id} onSuccess={handlePaymentSuccess} onCancel={() => setShowPaymentModal(false)} /></Elements>}
+
+            {/* GAMES PLAYED MODAL */}
+            {showGamesPlayed && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+                    <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '600px', border: '1px solid #333', position: 'relative', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                        <button onClick={() => setShowGamesPlayed(false)} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                        <h3 style={{ color: '#38bdf8', marginTop: 0, textAlign: 'center' }}>{t.gamesPlayed}</h3>
+                        <div style={{ overflowY: 'auto', flexGrow: 1, marginTop: '10px' }}>
+                            {isLoadingGames ? (
+                                <div style={{ textAlign: 'center', color: '#aaa' }}>Loading...</div>
+                            ) : gamesHistoryList.length === 0 ? (
+                                <div style={{ textAlign: 'center', color: '#aaa' }}>No games found in the database.</div>
+                            ) : (
+                                gamesHistoryList.map(g => {
+                                    const dateStr = g.created_at ? new Date(g.created_at).toLocaleString() : 'Unknown Date';
+                                    return (
+                                        <div key={g.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#2c2c2c', padding: '15px', marginBottom: '10px', borderRadius: '6px' }}>
+                                            <div>
+                                                <div style={{ fontSize: '15px', fontWeight: 'bold', color: 'white' }}>⬜ {g.white_email?.split('@')[0]} <span style={{ color: '#888' }}>vs</span> ⬛ {g.black_email?.split('@')[0]}</div>
+                                                <div style={{ fontSize: '13px', color: '#aaa', marginTop: '4px' }}>
+                                                    {dateStr} | Result: <b style={{ color: '#f59e0b' }}>{g.result?.toUpperCase()}</b> | Moves: {g.moves?.length || 0}
+                                                </div>
+                                            </div>
+                                            <button onClick={() => {
+                                                setMoveHistory(g.moves || []);
+                                                setCurrentMoveIndex(0);
+                                                setIsGameOverManually(true);
+                                                setOpponent(null);
+                                                setIsPlayingComputer(false);
+                                                setStatusKey("");
+                                                setCustomStatus("");
+                                                setReplayInfo(g);
+                                                setShowGamesPlayed(false);
+                                            }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <nav onMouseEnter={() => setIsSidebarHovered(true)} onMouseLeave={() => setIsSidebarHovered(false)} style={{ height: '100vh', width: isSidebarHovered ? '200px' : '60px', backgroundColor: '#262421', borderRight: '1px solid #333', transition: 'width 0.2s ease', display: 'flex', flexDirection: 'column', flexShrink: 0, zIndex: 1000, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', alignItems: 'center', padding: '15px 18px', borderBottom: '1px solid #333', marginBottom: '10px', height: '60px', flexShrink: 0 }}>
@@ -864,6 +991,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     <div key={item.label} onClick={() => {
                         if (item.label === t.community) { setShowCommunityChat(prev => !prev); setTimeout(() => document.getElementById('community-input')?.focus(), 100); }
                         else if (item.label === t.coach) { window.open('https://www.chess.com/play/coach', '_blank', 'noopener,noreferrer'); }
+                        else if (item.label === t.gamesPlayed) { setShowGamesPlayed(true); fetchGamesHistory(); }
                     }} style={{ display: 'flex', alignItems: 'center', padding: '12px 18px', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background 0.2s', color: '#b0b0b0' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                         <span style={{ fontSize: '22px', width: '30px', textAlign: 'center' }}>{item.icon}</span>
                         <span style={{ marginLeft: '10px', fontSize: '15px', fontWeight: 'bold', opacity: isSidebarHovered ? 1 : 0, transition: 'opacity 0.2s' }}>{item.label}</span>
@@ -894,6 +1022,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
                 <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', flexGrow: 1, padding: isMobile ? '10px' : '20px', gap: '20px', overflowX: 'hidden', overflowY: 'auto', justifyContent: isMobile ? 'flex-start' : 'center', alignItems: isMobile ? 'stretch' : 'flex-start' }}>
 
+                    {/* 1. COMMUNITY CHAT */}
                     {showCommunityChat && (
                         <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '250px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '300px' : 'auto', margin: isMobile ? '0 auto' : '0' }}>
                             <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#f97316', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>🌍 {t.communityChat}</div>
@@ -911,6 +1040,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         </div>
                     )}
 
+                    {/* 2. CHESS BOARD */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '560px', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
                         {incomingChallenge && (
                             <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
@@ -944,7 +1074,28 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', width: '100%', maxWidth: '100%' }}>{board}</div>
                     </div>
 
-                    <aside style={{ width: '100%', maxWidth: isMobile ? '100%' : '300px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
+                    {/* 3. MOVE HISTORY (Extracted and Placed Next To Board) */}
+                    <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', width: '100%', maxWidth: isMobile ? '100%' : '180px', flexShrink: 0, height: isMobile ? '300px' : 'auto', margin: isMobile ? '0 auto' : '0', boxSizing: 'border-box' }}>
+                        <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#aaa', textAlign: 'center', textTransform: 'uppercase' }}>{t.history}</h4>
+                        <div style={{ overflowY: 'auto', flexGrow: 1, fontSize: '12px' }}>
+                            {formattedHistory.map((row, i) => (
+                                <div key={i} style={{ padding: '4px 0', borderBottom: '1px solid #222', display: 'flex' }}>
+                                    <span style={{ color: '#666', width: '30px' }}>{row.turn}.</span>
+                                    <b style={{ color: currentMoveIndex === (i * 2) + 1 ? '#38bdf8' : 'white', flex: 1, textAlign: 'left' }}>{row.w}</b>
+                                    <b style={{ color: currentMoveIndex === (i * 2) + 2 ? '#38bdf8' : 'white', flex: 1, textAlign: 'left' }}>{row.b}</b>
+                                </div>
+                            ))}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', backgroundColor: '#2c2c2c', padding: '5px', borderRadius: '4px' }}>
+                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(0)}>⏪</button>
+                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}>◀️</button>
+                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(prev => Math.min(moveHistory.length, prev + 1))}>▶️</button>
+                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(moveHistory.length)}>⏩</button>
+                        </div>
+                    </div>
+
+                    {/* 4. STATS & CONTROLS */}
+                    <aside style={{ width: '100%', maxWidth: isMobile ? '100%' : '260px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', textAlign: 'center', width: '100%' }}>
                                 <div style={{ flex: 1 }}><div style={{ color: '#38bdf8', fontSize: '10px' }}>{t.score}</div><div style={{ fontSize: '16px' }}>{stats.score}</div></div>
@@ -1029,27 +1180,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         <button onClick={() => { setOpponent(null); setIsPlayingComputer(true); resetMatch(300); setStatusKey("gameStarted"); setCustomStatus(""); speak(t.gameStarted, language); }} style={{ width: '100%', padding: '10px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}>{t.playComputer}</button>
                         <button onClick={() => setGunshotEnabled(!gunshotEnabled)} style={{ width: '100%', padding: '10px', backgroundColor: gunshotEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}>{gunshotEnabled ? t.turnOffGunshot : t.turnOnGunshot}</button>
                         <button onClick={() => setSpeakChatEnabled(!speakChatEnabled)} style={{ width: '100%', padding: '10px', backgroundColor: speakChatEnabled ? '#f97316' : '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold', flexShrink: 0 }}>{speakChatEnabled ? t.turnOffChatSpeak : t.turnOnChatSpeak}</button>
-
-                        <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: '150px', flexShrink: 0 }}>
-                            <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#aaa' }}>{t.history}</h4>
-                            <div style={{ overflowY: 'auto', flexGrow: 1, fontSize: '12px' }}>
-                                {formattedHistory.map((row, i) => (
-                                    <div key={i} style={{ padding: '3px 0', borderBottom: '1px solid #222' }}>
-                                        <span style={{ color: '#666', marginRight: '8px' }}>{row.turn}.</span>
-                                        <b style={{ color: currentMoveIndex === (i * 2) + 1 ? '#38bdf8' : 'white' }}>{row.w}</b> &nbsp;&nbsp;
-                                        <b style={{ color: currentMoveIndex === (i * 2) + 2 ? '#38bdf8' : 'white' }}>{row.b}</b>
-                                    </div>
-                                ))}
-                            </div>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '5px' }}>
-                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(0)}>⏪</button>
-                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}>◀️</button>
-                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(prev => Math.min(moveHistory.length, prev + 1))}>▶️</button>
-                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(moveHistory.length)}>⏩</button>
-                            </div>
-                        </div>
                     </aside>
 
+                    {/* 5. ADS */}
                     <div style={{ width: '100%', maxWidth: isMobile ? '100%' : '220px', backgroundColor: '#1e1e1e', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', flexShrink: 0, height: isMobile ? '400px' : 'auto', margin: isMobile ? '0 auto' : '0' }}>
                         <div style={{ padding: '15px', borderBottom: '1px solid #333', fontSize: '13px', color: '#10b981', fontWeight: 'bold', textAlign: 'center', backgroundColor: '#1e1e1e', borderRadius: '8px 8px 0 0', flexShrink: 0 }}>{t.travelDeals} ({travelAds.length})</div>
                         <div style={{ flexGrow: 1, overflowY: 'auto', padding: '15px', display: 'flex', flexDirection: 'column', gap: '20px', minHeight: 0 }}>
