@@ -38,7 +38,7 @@ if (STRIPE_KEY && STRIPE_KEY.startsWith('pk_')) {
 // ==========================================
 const translations = {
     EN: {
-        balance: "Balance", addFunds: "Add Funds", loggedIn: "Logged in", logout: "Logout",
+        balance: "Balance", addFunds: "Add Funds", withdraw: "Withdraw", insufficientFunds: "Insufficient funds.", loggedIn: "Logged in", logout: "Logout",
         communityChat: "COMMUNITY CHAT", saySomething: "Say something...", send: "Send",
         actionDraw: "🤝 Draw", actionResign: "🏳️ Resign", playComputer: "Play Computer",
         turnOffGunshot: "Turn off gunshot", turnOnGunshot: "Turn on gunshot",
@@ -48,7 +48,7 @@ const translations = {
         travelDeals: "✈️ TRAVEL DEALS", menu: "MENU", coach: "Coach", watch: "Watch",
         news: "News", community: "Community", online: "Online", members: "Members",
         gamesPlayed: "Games Played", replayMode: "REPLAY MODE",
-        time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline",
+        time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline", emailChallenge: "Email Challenge (10m)",
         welcomeBack: "Welcome Back", createAccount: "Create Account", signupFree: "Signup for free and play chess for free.",
         email: "Email", password: "Password", login: "Log In", signup: "Sign Up",
         needAccount: "Need an account? Sign up", haveAccount: "Have an account? Log in",
@@ -60,7 +60,7 @@ const translations = {
         opponentDisconnected: "Opponent disconnected. You Win!"
     },
     ES: {
-        balance: "Saldo", addFunds: "Añadir Fondos", loggedIn: "Conectado", logout: "Salir",
+        balance: "Saldo", addFunds: "Añadir Fondos", withdraw: "Retirar", insufficientFunds: "Fondos insuficientes.", loggedIn: "Conectado", logout: "Salir",
         communityChat: "CHAT COMUNIDAD", saySomething: "Di algo...", send: "Enviar",
         actionDraw: "🤝 Empate", actionResign: "🏳️ Rendirse", playComputer: "Jugar contra PC",
         turnOffGunshot: "Apagar disparos", turnOnGunshot: "Activar disparos",
@@ -70,7 +70,7 @@ const translations = {
         travelDeals: "✈️ OFERTAS DE VIAJE", menu: "MENÚ", coach: "Entrenador", watch: "Ver",
         news: "Noticias", community: "Comunidad", online: "En línea", members: "Miembros",
         gamesPlayed: "Partidas Jugadas", replayMode: "MODO REPETICIÓN",
-        time: "TIEMPO", wager: "APUESTA", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar",
+        time: "TIEMPO", wager: "APUESTA", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar", emailChallenge: "Retar por Email (10m)",
         welcomeBack: "Bienvenido", createAccount: "Crear Cuenta", signupFree: "Regístrate gratis, juega gratis.",
         email: "Correo", password: "Contraseña", login: "Iniciar Sesión", signup: "Registrarse",
         needAccount: "¿Necesitas cuenta? Regístrate", haveAccount: "¿Tienes cuenta? Inicia sesión",
@@ -82,7 +82,7 @@ const translations = {
         opponentDisconnected: "El oponente se desconectó. ¡Tú ganas!"
     },
     IT: {
-        balance: "Saldo", addFunds: "Aggiungi Fondi", loggedIn: "Connesso", logout: "Esci",
+        balance: "Saldo", addFunds: "Aggiungi Fondi", withdraw: "Ritira", insufficientFunds: "Fondi insufficienti.", loggedIn: "Connesso", logout: "Esci",
         communityChat: "CHAT COMUNITÀ", saySomething: "Dì qualcosa...", send: "Invia",
         actionDraw: "🤝 Patta", actionResign: "🏳️ Abbandona", playComputer: "Gioca contro PC",
         turnOffGunshot: "Spegni spari", turnOnGunshot: "Attiva spari",
@@ -92,7 +92,7 @@ const translations = {
         travelDeals: "✈️ OFFERTE VIAGGIO", menu: "MENU", coach: "Allenatore", watch: "Guarda",
         news: "Notizie", community: "Comunità", online: "Online", members: "Membri",
         gamesPlayed: "Partite Giocate", replayMode: "MODALITÀ REPLAY",
-        time: "TEMPO", wager: "PUNTATA", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta",
+        time: "TEMPO", wager: "PUNTATA", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta", emailChallenge: "Sfida via Email (10m)",
         welcomeBack: "Bentornato", createAccount: "Crea Account", signupFree: "Iscriviti e gioca gratis.",
         email: "Email", password: "Password", login: "Accedi", signup: "Iscriviti",
         needAccount: "Serve un account? Iscriviti", haveAccount: "Hai un account? Accedi",
@@ -479,8 +479,17 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const fetchUserStats = async () => {
         if (!user) return; // Guests do not have stats
-        let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        if (data) setStats({ wins: data.wins || 0, losses: data.losses || 0, draws: data.draws || 0, score: data.score !== undefined ? data.score : 100, balance: data.balance || 0 });
+        let { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        if (error) console.error("Profile fetch error:", error.message);
+        if (data) {
+            setStats({
+                wins: data.wins || 0,
+                losses: data.losses || 0,
+                draws: data.draws || 0,
+                score: data.score !== undefined ? data.score : 100,
+                balance: parseFloat(data.balance || 0)
+            });
+        }
     };
 
     const fetchGamesHistory = async () => {
@@ -543,7 +552,25 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const handlePaymentSuccess = async (amount) => {
         setShowPaymentModal(false);
-        setStats(prev => ({ ...prev, balance: (prev.balance || 0) + amount }));
+
+        const currentBalance = parseFloat(stats.balance || 0);
+        const newBalance = currentBalance + parseFloat(amount);
+
+        // 1. Update UI
+        setStats(prev => ({ ...prev, balance: newBalance }));
+
+        // 2. Update Database
+        if (user) {
+            const { error } = await supabase
+                .from('profiles')
+                .update({ balance: newBalance })
+                .eq('id', user.id);
+
+            if (error) {
+                console.error("Failed to update database balance:", error);
+                alert("Payment processed, but database update failed. Please contact support.");
+            }
+        }
     };
 
     const fetchAllMembers = async () => { let { data } = await supabase.from('profiles').select('email'); if (data) setAllMembers(data); };
@@ -582,7 +609,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         saveGameToDb(type, reason);
         if (!user) return; // Guests do not record results
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        const updates = { ...data, score: data?.score || 100, balance: data?.balance || 0 };
+        const updates = { ...data, score: data?.score || 100, balance: parseFloat(data?.balance || 0) };
         const stake = currentStakeRef.current;
         if (type === 'win') { updates.wins += 1; updates.score += 8; updates.balance += stake; }
         if (type === 'loss') { updates.losses += 1; updates.score -= 8; updates.balance -= stake; }
@@ -792,6 +819,33 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (!lobbyChannel) return;
         setStatusKey(""); setCustomStatus(`Challenge sent for $${wagerAmount}...`);
         await lobbyChannel.send({ type: 'broadcast', event: 'challenge', payload: { challengerEmail: userEmail, targetEmail, timeControl: challengeTime, wagerAmount } });
+    };
+
+    // ========================================================
+    // 🔥 NEW EMAIL CHALLENGE FUNCTION
+    // ========================================================
+    const handleEmailChallenge = async (targetEmail) => {
+        if (!user) { alert("Please login to challenge players."); return; }
+
+        if (window.confirm(`Send an email challenge for a 10-minute game to ${targetEmail}?`)) {
+            try {
+                // Call a Supabase Edge Function configured with your transactional SMTP provider
+                const { error } = await supabase.functions.invoke('send-challenge-email', {
+                    body: {
+                        targetEmail: targetEmail,
+                        challengerEmail: userEmail,
+                        timeControl: 600 // 10 minutes in seconds
+                    }
+                });
+
+                if (error) throw error;
+
+                alert(`Challenge email sent to ${targetEmail}!`);
+            } catch (err) {
+                console.error("Error sending email:", err);
+                alert("Failed to send challenge email.");
+            }
+        }
     };
 
     const handleAcceptChallenge = async () => {
@@ -1009,7 +1063,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
                         {user ? (
                             <>
-                                <span style={{ fontSize: '14px', color: '#10b981', fontWeight: 'bold' }}>{t.balance}: ${stats.balance?.toFixed(2) || '0.00'}</span>
+                                <span style={{ fontSize: '14px', color: '#10b981', fontWeight: 'bold' }}>{t.balance}: ${parseFloat(stats.balance || 0).toFixed(2)}</span>
                                 <button onClick={handleAddFundsClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{t.addFunds}</button>
                                 <span style={{ fontSize: '14px', whiteSpace: 'nowrap', display: isMobile ? 'none' : 'inline' }}>{t.loggedIn}: <b style={{ color: '#38bdf8' }}>{userEmail.split('@')[0]}</b></span>
                                 <button onClick={handleLogoutClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>{t.logout}</button>
@@ -1139,7 +1193,17 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                     </div>
                                 ))}
                                 {viewMode === 'all' && allMembers.map((u, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}><span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span></div>
+                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', padding: '4px 0', borderBottom: '1px solid #333' }}>
+                                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span>
+                                        {u.email !== userEmail && user && (
+                                            <button
+                                                onClick={() => handleEmailChallenge(u.email)}
+                                                style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#f97316', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', whiteSpace: 'nowrap' }}
+                                            >
+                                                {t.emailChallenge}
+                                            </button>
+                                        )}
+                                    </div>
                                 ))}
                                 {viewMode === 'tv' && tvGames.map((game, i) => (
                                     <a key={i} href={game.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '8px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'block' }}>
