@@ -10,7 +10,6 @@ import './App.css';
 // ==========================================
 let STRIPE_KEY = 'pk_test_YOUR_STRIPE_PUBLIC_KEY'; // Fallback
 
-// 1. Safely check for environment variables
 try {
     if (typeof process !== 'undefined' && process.env.REACT_APP_STRIPE_PUBLIC_KEY) {
         STRIPE_KEY = process.env.REACT_APP_STRIPE_PUBLIC_KEY;
@@ -104,25 +103,33 @@ const translations = {
     }
 };
 
+// ==========================================
+// 🔊 SOUND ASSETS & TTS
+// ==========================================
 const sounds = {
-    move: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Move.mp3',
-    capture: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Capture.mp3',
-    check: 'https://raw.githubusercontent.com/lichess-org/lila/master/public/sound/standard/Check.mp3',
+    move: 'https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/move-self.mp3',
+    capture: 'https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/capture.mp3',
+    check: 'https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/move-check.mp3',
     thunder: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_7845f4fae2.mp3',
 };
 
 const speak = (text, langCode = 'EN') => {
     if ('speechSynthesis' in window) {
-        const utterance = new SpeechSynthesisUtterance(text);
-        if (langCode === 'ES') utterance.lang = 'es-ES';
-        else if (langCode === 'IT') utterance.lang = 'it-IT';
-        else utterance.lang = 'en-US';
-        utterance.rate = 1.0;
-        utterance.pitch = 1.0;
-        window.speechSynthesis.speak(utterance);
+        try {
+            const utterance = new SpeechSynthesisUtterance(text);
+            if (langCode === 'ES') utterance.lang = 'es-ES';
+            else if (langCode === 'IT') utterance.lang = 'it-IT';
+            else utterance.lang = 'en-US';
+            utterance.rate = 1.0;
+            utterance.pitch = 1.0;
+            window.speechSynthesis.speak(utterance);
+        } catch (e) { console.warn("TTS Error:", e); }
     }
 };
 
+// ==========================================
+// 🧠 CHESS AI ENGINE
+// ==========================================
 const pieceValues = { p: 10, n: 30, b: 30, r: 50, q: 90, k: 900 };
 function evaluateBoard(gameInstance) {
     let totalEval = 0;
@@ -136,7 +143,9 @@ function evaluateBoard(gameInstance) {
     return totalEval;
 }
 function minimax(gameInstance, depth, alpha, beta, isMaximizingPlayer) {
-    if (depth === 0 || gameInstance.isGameOver()) return evaluateBoard(gameInstance);
+    const isGameOver = typeof gameInstance.isGameOver === 'function' ? gameInstance.isGameOver() : gameInstance.game_over();
+    if (depth === 0 || isGameOver) return evaluateBoard(gameInstance);
+
     const moves = gameInstance.moves();
     if (isMaximizingPlayer) {
         let bestVal = -Infinity;
@@ -315,7 +324,10 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [showGamesPlayed, setShowGamesPlayed] = useState(false);
     const [gamesHistoryList, setGamesHistoryList] = useState([]);
     const [isLoadingGames, setIsLoadingGames] = useState(false);
+
+    // 🔥 Replay State 🔥
     const [replayInfo, setReplayInfo] = useState(null);
+    const [isAutoPlaying, setIsAutoPlaying] = useState(false);
 
     const [opponent, setOpponent] = useState(null);
     const [playerColor, setPlayerColor] = useState('w');
@@ -356,23 +368,19 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const gameRef = useRef(new Chess());
     useEffect(() => { opponentRef.current = opponent; }, [opponent]);
 
-    // 🔥 NEW: Check URL for Email Challenge Parameters 🔥
     useEffect(() => {
-        if (!userEmail) return; // Only process if the user is successfully logged in
+        if (!userEmail) return;
 
         const params = new URLSearchParams(window.location.search);
         const urlChallenger = params.get('challenger');
         const urlTime = params.get('time');
 
         if (urlChallenger && urlTime) {
-            // Trigger the Accept/Decline Banner
             setIncomingChallenge({
                 email: urlChallenger,
                 timeControl: parseInt(urlTime, 10),
-                wagerAmount: 0 // Default to 0 for email challenges
+                wagerAmount: 0
             });
-
-            // Clean the URL so refreshing the page doesn't pop the banner up again
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     }, [userEmail]);
@@ -384,8 +392,37 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         B: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg', Q: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg', K: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg'
     };
 
+    // Calculate display board based on history
     const displayGame = new Chess();
-    moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { } });
+    moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { console.error("History replay error", e); } });
+
+    // 🔥 NEW: Auto-play logic for replays 🔥
+    useEffect(() => {
+        let timer;
+        if (replayInfo && isAutoPlaying && currentMoveIndex < moveHistory.length) {
+            timer = setTimeout(() => {
+                try {
+                    // Create a temporary board to accurately simulate the next move and trigger sounds
+                    const tempGame = new Chess();
+                    moveHistory.slice(0, currentMoveIndex).forEach(m => tempGame.move(m));
+                    const nextMove = tempGame.move(moveHistory[currentMoveIndex]);
+
+                    if (nextMove) {
+                        playMoveSound(nextMove, tempGame);
+                        if (nextMove.captured) {
+                            triggerCaptureEffects(nextMove.to, nextMove.color === 'w' ? 'b' : 'w');
+                        }
+                    }
+                } catch (e) {
+                    console.error("Auto-play sound error:", e);
+                }
+                setCurrentMoveIndex(prev => prev + 1);
+            }, 1000); // 1-second pause
+        } else if (currentMoveIndex >= moveHistory.length) {
+            setIsAutoPlaying(false);
+        }
+        return () => clearTimeout(timer);
+    }, [isAutoPlaying, currentMoveIndex, moveHistory, replayInfo]);
 
     useEffect(() => {
         fetchUserStats(); fetchAllMembers(); fetchTvGames(); fetchChessComTv(); fetchCommunityComments();
@@ -509,16 +546,30 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     };
 
     const playMoveSound = (move, gameInstance) => {
-        let audioUrl = sounds.move;
-        if (gameInstance.inCheck()) { audioUrl = sounds.check; speak("Check", language); }
-        else if (move.captured) audioUrl = sounds.capture;
-        new Audio(audioUrl).play().catch(() => { });
+        try {
+            let audioUrl = sounds.move;
+            let isCheck = false;
+            if (typeof gameInstance.isCheck === 'function') isCheck = gameInstance.isCheck();
+            else if (typeof gameInstance.inCheck === 'function') isCheck = gameInstance.inCheck();
+            else if (typeof gameInstance.in_check === 'function') isCheck = gameInstance.in_check();
+
+            if (isCheck) { audioUrl = sounds.check; speak("Check", language); }
+            else if (move.captured) audioUrl = sounds.capture;
+
+            const audio = new Audio(audioUrl);
+            audio.play().catch(err => console.warn("Audio playback prevented by browser:", err));
+        } catch (e) { console.error("Sound logic error:", e); }
     };
 
     const triggerCaptureEffects = (square, capturedColor) => {
-        if (gunshotEnabledRef.current) new Audio('/shotgun.mp3').play().catch(() => { });
-        setExplosion({ square, color: capturedColor });
-        setTimeout(() => setExplosion(null), 1000);
+        try {
+            if (gunshotEnabledRef.current) {
+                const audio = new Audio('/shotgun.mp3');
+                audio.play().catch(() => { });
+            }
+            setExplosion({ square, color: capturedColor });
+            setTimeout(() => setExplosion(null), 1000);
+        } catch (e) { console.error("Capture effect error:", e); }
     };
 
     const recordResult = async (type, reason = 'Unknown') => {
@@ -539,6 +590,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setWhiteTime(timeControl); setBlackTime(timeControl); setMoveFrom('');
         setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
         setReplayInfo(null);
+        setIsAutoPlaying(false);
     };
 
     const handleLogoutClick = async () => {
@@ -585,12 +637,14 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             .on('broadcast', { event: 'declineChallenge' }, ({ payload }) => { if (userEmail && payload.targetEmail === userEmail) { setStatusKey(""); setCustomStatus("Challenge declined."); } })
             .on('broadcast', { event: 'move' }, ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail) {
-                    const moveResult = gameRef.current.move(payload.moveSan);
-                    if (moveResult) {
-                        playMoveSound(moveResult, gameRef.current);
-                        if (moveResult.captured) triggerCaptureEffects(payload.to, moveResult.color === 'w' ? 'b' : 'w');
-                        setMoveHistory(prev => { const next = [...prev, payload.moveSan]; setCurrentMoveIndex(next.length); return next; });
-                    }
+                    try {
+                        const moveResult = gameRef.current.move(payload.moveSan);
+                        if (moveResult) {
+                            playMoveSound(moveResult, gameRef.current);
+                            if (moveResult.captured) triggerCaptureEffects(payload.to, moveResult.color === 'w' ? 'b' : 'w');
+                            setMoveHistory(prev => { const next = [...prev, payload.moveSan]; setCurrentMoveIndex(next.length); return next; });
+                        }
+                    } catch (e) { console.error("Broadcast Move Error:", e); }
                 }
             })
             .on('broadcast', { event: 'chat' }, ({ payload }) => {
@@ -647,7 +701,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     }, [opponent, isPlayingComputer, lobbyChannel, userEmail]);
 
     useEffect(() => {
-        if (displayGame.isGameOver() || isGameOverManually || currentMoveIndex < moveHistory.length || (!opponent && !isPlayingComputer)) { clearInterval(timerRef.current); return; }
+        const isGameOver = typeof displayGame.isGameOver === 'function' ? displayGame.isGameOver() : displayGame.game_over();
+        if (isGameOver || isGameOverManually || currentMoveIndex < moveHistory.length || (!opponent && !isPlayingComputer)) { clearInterval(timerRef.current); return; }
+
         timerRef.current = setInterval(() => {
             if (displayGame.turn() === 'w') setWhiteTime(t => Math.max(0, t - 1)); else setBlackTime(t => Math.max(0, t - 1));
         }, 1000);
@@ -663,7 +719,10 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     }, [whiteTime, blackTime, isGameOverManually, playerColor, language, t]);
 
     useEffect(() => {
-        if (displayGame.isCheckmate()) {
+        const isCheckmate = typeof displayGame.isCheckmate === 'function' ? displayGame.isCheckmate() : displayGame.in_checkmate();
+        const isDraw = typeof displayGame.isDraw === 'function' ? displayGame.isDraw() : displayGame.in_draw();
+
+        if (isCheckmate) {
             const loserColor = displayGame.turn(); const outcome = playerColor === loserColor ? t.youLose : t.youWin;
             setStatusKey("checkmate"); setCustomStatus(` ${outcome}`);
             if (!isGameOverManually) {
@@ -672,7 +731,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 if (gunshotEnabledRef.current) { for (let i = 0; i < 3; i++) setTimeout(() => new Audio('/shotgun.mp3').play().catch(() => { }), i * 400); }
                 recordResult(playerColor === loserColor ? 'loss' : 'win', 'Checkmate');
             }
-        } else if (displayGame.isDraw()) {
+        } else if (isDraw) {
             setStatusKey("gameIsDraw"); setCustomStatus("");
             if (!isGameOverManually) { setIsGameOverManually(true); speak(t.gameIsDraw, language); recordResult('draw', 'Stalemate / Rules'); }
         } else if (!isGameOverManually && (opponent || isPlayingComputer)) {
@@ -763,7 +822,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     };
 
     function onSquareClick(square) {
-        if (displayGame.isGameOver() || isGameOverManually) return;
+        const isGameOver = typeof displayGame.isGameOver === 'function' ? displayGame.isGameOver() : displayGame.game_over();
+        if (isGameOver || isGameOverManually) return;
         if (!opponent && !isPlayingComputer) return;
         if (currentMoveIndex < moveHistory.length) { setCurrentMoveIndex(moveHistory.length); return; }
         if (opponent && displayGame.turn() !== playerColor) return;
@@ -777,24 +837,40 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             if (move) {
                 playMoveSound(move, gameRef.current);
                 if (move.captured) triggerCaptureEffects(square, move.color === 'w' ? 'b' : 'w');
-                const nextHistory = [...moveHistory, move.san]; setMoveHistory(nextHistory); setCurrentMoveIndex(nextHistory.length); setMoveFrom('');
+                const nextHistory = [...moveHistory, move.san];
+                setMoveHistory(nextHistory);
+                setCurrentMoveIndex(nextHistory.length);
+                setMoveFrom('');
+
                 if (opponentRef.current && userEmail) {
                     lobbyChannel.send({ type: 'broadcast', event: 'move', payload: { targetEmail: opponentRef.current, moveSan: move.san, captured: !!move.captured, to: move.to } });
                 }
-            } else { if (piece?.color === displayGame.turn()) setMoveFrom(square); else setMoveFrom(''); }
-        } catch (e) { setMoveFrom(''); }
+            } else {
+                if (piece?.color === displayGame.turn()) setMoveFrom(square);
+                else setMoveFrom('');
+            }
+        } catch (e) {
+            console.error("Move processing error:", e);
+            setMoveFrom('');
+        }
     }
 
     useEffect(() => {
-        if (!isPlayingComputer || displayGame.isGameOver() || isGameOverManually || opponent || currentMoveIndex < moveHistory.length) return;
+        const isGameOver = typeof displayGame.isGameOver === 'function' ? displayGame.isGameOver() : displayGame.game_over();
+        if (!isPlayingComputer || isGameOver || isGameOverManually || opponent || currentMoveIndex < moveHistory.length) return;
         if (displayGame.turn() === 'b') {
             const timer = setTimeout(() => {
-                const bestMove = getBestMove(gameRef.current, 2);
-                const moveData = gameRef.current.move(bestMove);
-                if (moveData) {
-                    playMoveSound(moveData, gameRef.current);
-                    if (moveData.captured) triggerCaptureEffects(moveData.to, moveData.color === 'w' ? 'b' : 'w');
-                    setMoveHistory(prev => [...prev, bestMove]); setCurrentMoveIndex(prev => prev + 1);
+                try {
+                    const bestMove = getBestMove(gameRef.current, 2);
+                    const moveData = gameRef.current.move(bestMove);
+                    if (moveData) {
+                        playMoveSound(moveData, gameRef.current);
+                        if (moveData.captured) triggerCaptureEffects(moveData.to, moveData.color === 'w' ? 'b' : 'w');
+                        setMoveHistory(prev => [...prev, bestMove]);
+                        setCurrentMoveIndex(prev => prev + 1);
+                    }
+                } catch (e) {
+                    console.error("Computer logic error:", e);
                 }
             }, 600);
             return () => clearTimeout(timer);
@@ -808,6 +884,10 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     };
 
     const getPlayerName = (color) => {
+        if (replayInfo) {
+            const email = color === 'w' ? replayInfo.white_email : replayInfo.black_email;
+            return email ? email.split('@')[0] : (color === 'w' ? 'White' : 'Black');
+        }
         if (!opponent && !isPlayingComputer) return "Waiting...";
         if (playerColor === color) return userEmail ? `${userEmail.split('@')[0]} (You)` : "Guest (You)";
         return isPlayingComputer ? "Computer" : (opponent ? opponent.split('@')[0] : "Opponent");
@@ -852,10 +932,10 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     let currentStatusText = statusKey ? t[statusKey] + customStatus : customStatus;
     if (replayInfo) {
-        if (currentMoveIndex === moveHistory.length) {
-            currentStatusText = `🏁 Game Over: ${replayInfo.result?.toUpperCase()}`;
+        if (currentMoveIndex === moveHistory.length && moveHistory.length > 0) {
+            currentStatusText = `🏁 Game Over: ${replayInfo.result?.toUpperCase()} (Move ${currentMoveIndex}/${moveHistory.length})`;
         } else {
-            currentStatusText = `🔄 ${t.replayMode} - Move ${currentMoveIndex} / ${moveHistory.length}`;
+            currentStatusText = `▶️ Reviewing Game (Move ${currentMoveIndex}/${moveHistory.length})`;
         }
     }
 
@@ -887,7 +967,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                 </div>
                                             </div>
                                             <button onClick={() => {
-                                                setMoveHistory(g.moves || []);
+                                                let parsedMoves = [];
+                                                try {
+                                                    parsedMoves = typeof g.moves === 'string' ? JSON.parse(g.moves) : (g.moves || []);
+                                                } catch (e) { parsedMoves = []; }
+
+                                                setMoveHistory(parsedMoves);
                                                 setCurrentMoveIndex(0);
                                                 setIsGameOverManually(true);
                                                 setOpponent(null);
@@ -895,7 +980,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                 setStatusKey("");
                                                 setCustomStatus("");
                                                 setReplayInfo(g);
+                                                setPlayerColor('w');
                                                 setShowGamesPlayed(false);
+
+                                                // 🔥 START THE AUTO-REPLAY AND TTS 🔥
+                                                setIsAutoPlaying(true);
+                                                speak("Watch the game and see all the moves", language);
                                             }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
                                         </div>
                                     );
@@ -985,15 +1075,15 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 10px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'w' ? '#38bdf8' : '#333', color: displayGame.turn() === 'w' ? '#000' : '#fff', flex: 1, overflow: 'hidden' }}>
                                 <span style={{ fontSize: isMobile ? '14px' : '18px' }}>⬜</span>
                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexGrow: 1 }}>{whitePlayerName}</span>
-                                <span>{formatTime(whiteTime)}</span>
+                                <span>{replayInfo ? '--:--' : formatTime(whiteTime)}</span>
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '8px 10px', borderRadius: '4px', backgroundColor: displayGame.turn() === 'b' ? '#38bdf8' : '#333', color: displayGame.turn() === 'b' ? '#000' : '#fff', flex: 1, overflow: 'hidden' }}>
                                 <span style={{ fontSize: isMobile ? '14px' : '18px' }}>⬛</span>
                                 <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexGrow: 1 }}>{blackPlayerName}</span>
-                                <span>{formatTime(blackTime)}</span>
+                                <span>{replayInfo ? '--:--' : formatTime(blackTime)}</span>
                             </div>
                         </div>
-                        <div style={{ fontSize: '16px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{currentStatusText}</div>
+                        <div style={{ fontSize: '14px', marginBottom: '10px', color: '#fbbf24', fontWeight: 'bold' }}>{currentStatusText}</div>
 
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', width: '100%', maxWidth: '100%' }}>{board}</div>
                     </div>
@@ -1011,10 +1101,19 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             ))}
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '10px', backgroundColor: '#2c2c2c', padding: '5px', borderRadius: '4px' }}>
-                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(0)}>⏪</button>
-                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(prev => Math.max(0, prev - 1))}>◀️</button>
-                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(prev => Math.min(moveHistory.length, prev + 1))}>▶️</button>
-                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white' }} onClick={() => setCurrentMoveIndex(moveHistory.length)}>⏩</button>
+                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => { setIsAutoPlaying(false); setCurrentMoveIndex(0); }}>⏪</button>
+                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => { setIsAutoPlaying(false); setCurrentMoveIndex(prev => Math.max(0, prev - 1)); }}>◀️</button>
+
+                            {/* 🔥 NEW: Play/Pause button for replays 🔥 */}
+                            {replayInfo ? (
+                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => setIsAutoPlaying(prev => !prev)}>
+                                    {isAutoPlaying ? '⏸️' : '▶️'}
+                                </button>
+                            ) : (
+                                <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => setCurrentMoveIndex(prev => Math.min(moveHistory.length, prev + 1))}>▶️</button>
+                            )}
+
+                            <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => { setIsAutoPlaying(false); setCurrentMoveIndex(moveHistory.length); }}>⏩</button>
                         </div>
                     </div>
 
