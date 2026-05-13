@@ -573,7 +573,15 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     };
 
-    const fetchAllMembers = async () => { let { data } = await supabase.from('profiles').select('email'); if (data) setAllMembers(data); };
+    const fetchAllMembers = async () => {
+        let { data } = await supabase.from('profiles').select('email');
+        if (data) {
+            // SORT ALPHABETICALLY BY EMAIL
+            const sortedData = data.sort((a, b) => a.email.localeCompare(b.email, undefined, { sensitivity: 'base' }));
+            setAllMembers(sortedData);
+        }
+    };
+
     const fetchCommunityComments = async () => { let { data } = await supabase.from('comments').select('*').order('created_at', { ascending: false }).limit(50); if (data) setCommunityMessages(data.reverse()); };
 
     const fetchTvGames = async () => {
@@ -668,7 +676,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         }
                     });
                 }
-                setOnlineUsers(Array.from(userMap.values()));
+
+                // SORT ALPHABETICALLY BY EMAIL
+                const sortedOnlineUsers = Array.from(userMap.values()).sort((a, b) =>
+                    a.email.localeCompare(b.email, undefined, { sensitivity: 'base' })
+                );
+                setOnlineUsers(sortedOnlineUsers);
             })
             .on('broadcast', { event: 'challenge' }, ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail) setIncomingChallenge({ email: payload.challengerEmail, timeControl: payload.timeControl, wagerAmount: payload.wagerAmount || 0 });
