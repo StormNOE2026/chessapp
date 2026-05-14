@@ -381,26 +381,108 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const gameRef = useRef(new Chess());
     useEffect(() => { opponentRef.current = opponent; }, [opponent]);
 
-    // 🔥 NEW: Reset everything when the user changes or logs out 🔥
+    // 🔥 Fix: Nuke all local state when the account actually changes / signs out
     useEffect(() => {
+        // Completely wipe standard match variables instantly when userEmail changes
+        setActiveGameId(null);
+        setOpponent(null);
+        setMoveHistory([]);
+        setCurrentMoveIndex(0);
+        setMoveFrom('');
+        setIsPlayingComputer(false);
+        setStatusKey("waitingToStart");
+        setCustomStatus("");
+        setChallengeTime(600);
+        setWagerAmount(0);
+        setCurrentStake(0);
+        setWhiteTime(300);
+        setBlackTime(300);
+        setIsAutoPlaying(false);
+        setReplayInfo(null);
+        setIsGameOverManually(false);
+        setChatMessages([]);
+        gameRef.current = new Chess();
+
         if (!userEmail) {
-            setActiveGameId(null);
-            setOpponent(null);
-            setMoveHistory([]);
-            setCurrentMoveIndex(0);
-            setMoveFrom('');
-            setIsPlayingComputer(false);
-            setChallengeTime(600);
-            setWagerAmount(0);
-            setCurrentStake(0);
-            setWhiteTime(300);
-            setBlackTime(300);
-            setStatusKey("waitingToStart");
-            setCustomStatus("");
             setStats({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0, stripeAccountId: null });
-            gameRef.current = new Chess();
+            return;
         }
-    }, [userEmail]);
+
+        // Fresh login: Retrieve correct stats and active games
+        const fetchUserStats = async () => {
+            let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+            if (data) {
+                setStats({
+                    wins: data.wins || 0,
+                    losses: data.losses || 0,
+                    draws: data.draws || 0,
+                    score: data.score !== undefined ? data.score : 100,
+                    balance: parseFloat(data.balance || 0),
+                    stripeAccountId: data.stripe_account_id
+                });
+            }
+        };
+
+        const fetchAllMembers = async () => {
+            let { data } = await supabase.from('profiles').select('email');
+            if (data) {
+                const sortedData = data.sort((a, b) => a.email.localeCompare(b.email, undefined, { sensitivity: 'base' }));
+                setAllMembers(sortedData);
+            }
+        };
+
+        const fetchCommunityComments = async () => {
+            let { data } = await supabase.from('comments').select('*').order('created_at', { ascending: false }).limit(50);
+            if (data) setCommunityMessages(data.reverse());
+        };
+
+        const fetchActiveGame = async () => {
+            try {
+                const { data } = await supabase
+                    .from('games')
+                    .select('*')
+                    .or(`white_email.eq.${userEmail},black_email.eq.${userEmail}`)
+                    .eq('result', 'In Progress')
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (data && data.length > 0) {
+                    const g = data[0];
+                    const isWhite = g.white_email === userEmail;
+                    let parsedMoves = typeof g.moves === 'string' ? JSON.parse(g.moves) : (g.moves || []);
+
+                    gameRef.current = new Chess();
+                    parsedMoves.forEach(m => gameRef.current.move(m));
+
+                    setActiveGameId(g.id);
+                    setOpponent(isWhite ? g.black_email : g.white_email);
+                    setPlayerColor(isWhite ? 'w' : 'b');
+                    setMoveHistory(parsedMoves);
+                    setCurrentMoveIndex(parsedMoves.length);
+                    setChallengeTime(0); // Safely treat resumed game as untimed
+                    setWhiteTime(Infinity);
+                    setBlackTime(Infinity);
+
+                    if (parsedMoves.length === 0) {
+                        setStatusKey("gameStarted");
+                        setCustomStatus("");
+                    } else {
+                        setStatusKey("welcomeBack");
+                        setCustomStatus(" - Resumed");
+                        speak("Game Resumed", language);
+                    }
+                    setIsPlayingComputer(false);
+                    setIsGameOverManually(false);
+                }
+            } catch (err) { console.error("Error fetching active game:", err); }
+        };
+
+        fetchUserStats();
+        fetchAllMembers();
+        fetchCommunityComments();
+        fetchActiveGame();
+
+    }, [userEmail]); // <-- This hook handles initial data fetching & state wiping synchronously
 
     useEffect(() => {
         if (!userEmail) return;
@@ -455,69 +537,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         return () => clearTimeout(timer);
     }, [isAutoPlaying, currentMoveIndex, moveHistory, replayInfo]);
 
-    // 1. Fetch general community and user stats only when the email loads
-    useEffect(() => {
-        if (!userEmail) return;
-        fetchUserStats();
-        fetchAllMembers();
-        fetchTvGames();
-        fetchChessComTv();
-        fetchCommunityComments();
-    }, [userEmail]);
-
-    // 2. Fetch the persistent game safely without interrupting live gameplay
-    useEffect(() => {
-        if (!userEmail) return;
-
-        const fetchActiveGame = async () => {
-            // Prevent fetching and overriding if a game is already active on the screen
-            if (activeGameIdRef.current) return;
-
-            try {
-                const { data } = await supabase
-                    .from('games')
-                    .select('*')
-                    .or(`white_email.eq.${userEmail},black_email.eq.${userEmail}`)
-                    .eq('result', 'In Progress')
-                    .order('created_at', { ascending: false })
-                    .limit(1);
-
-                if (data && data.length > 0) {
-                    const g = data[0];
-                    const isWhite = g.white_email === userEmail;
-                    let parsedMoves = typeof g.moves === 'string' ? JSON.parse(g.moves) : (g.moves || []);
-
-                    // Restore Game Logic
-                    gameRef.current = new Chess();
-                    parsedMoves.forEach(m => gameRef.current.move(m));
-
-                    setActiveGameId(g.id);
-                    setOpponent(isWhite ? g.black_email : g.white_email);
-                    setPlayerColor(isWhite ? 'w' : 'b');
-                    setMoveHistory(parsedMoves);
-                    setCurrentMoveIndex(parsedMoves.length);
-                    setChallengeTime(0);
-                    setWhiteTime(Infinity);
-                    setBlackTime(Infinity);
-
-                    if (parsedMoves.length === 0) {
-                        setStatusKey("gameStarted");
-                        setCustomStatus("");
-                    } else {
-                        setStatusKey("welcomeBack");
-                        setCustomStatus(" - Resumed");
-                        speak("Game Resumed", language);
-                    }
-
-                    setIsPlayingComputer(false);
-                    setIsGameOverManually(false);
-                }
-            } catch (err) { console.error("Error fetching active game:", err); }
-        };
-
-        fetchActiveGame();
-    }, [userEmail]); // Stripped 'language' out so it only triggers on mount/login
-
     useEffect(() => {
         const fetchLocationAndSetAds = async () => {
             const regionalCities = {
@@ -548,25 +567,28 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             setTravelAds(generatedAds);
         };
         fetchLocationAndSetAds();
+
+        const fetchTvGames = async () => {
+            try {
+                const res = await fetch('https://lichess.org/api/tv/channels');
+                const data = await res.json();
+                setTvGames(Object.entries(data).map(([channel, game]) => ({ channel, url: `https://lichess.org/${game.gameId}`, white: game.user?.name || 'Unknown', whiteRating: game.rating || '?', black: 'Opponent', blackRating: '?' })));
+            } catch (e) { }
+        };
+        fetchTvGames();
+
+        const fetchChessComTv = async () => {
+            try {
+                const res = await fetch('https://api.chess.com/pub/streamers');
+                const data = await res.json();
+                setChessComStreamers(data.streamers.filter(s => s.is_live));
+            } catch (e) { }
+        };
+        fetchChessComTv();
     }, []);
 
     useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatMessages]);
     useEffect(() => { if (showCommunityChat && communityContainerRef.current) communityContainerRef.current.scrollTop = communityContainerRef.current.scrollHeight; }, [communityMessages, showCommunityChat]);
-
-    const fetchUserStats = async () => {
-        if (!user) return;
-        let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        if (data) {
-            setStats({
-                wins: data.wins || 0,
-                losses: data.losses || 0,
-                draws: data.draws || 0,
-                score: data.score !== undefined ? data.score : 100,
-                balance: parseFloat(data.balance || 0),
-                stripeAccountId: data.stripe_account_id
-            });
-        }
-    };
 
     const fetchGamesHistory = async () => {
         setIsLoadingGames(true);
@@ -677,32 +699,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     };
 
-    const fetchAllMembers = async () => {
-        let { data } = await supabase.from('profiles').select('email');
-        if (data) {
-            const sortedData = data.sort((a, b) => a.email.localeCompare(b.email, undefined, { sensitivity: 'base' }));
-            setAllMembers(sortedData);
-        }
-    };
-
-    const fetchCommunityComments = async () => { let { data } = await supabase.from('comments').select('*').order('created_at', { ascending: false }).limit(50); if (data) setCommunityMessages(data.reverse()); };
-
-    const fetchTvGames = async () => {
-        try {
-            const res = await fetch('https://lichess.org/api/tv/channels');
-            const data = await res.json();
-            setTvGames(Object.entries(data).map(([channel, game]) => ({ channel, url: `https://lichess.org/${game.gameId}`, white: game.user?.name || 'Unknown', whiteRating: game.rating || '?', black: 'Opponent', blackRating: '?' })));
-        } catch (e) { }
-    };
-
-    const fetchChessComTv = async () => {
-        try {
-            const res = await fetch('https://api.chess.com/pub/streamers');
-            const data = await res.json();
-            setChessComStreamers(data.streamers.filter(s => s.is_live));
-        } catch (e) { }
-    };
-
     const playMoveSound = (move, gameInstance) => {
         try {
             let audioUrl = sounds.move;
@@ -760,14 +756,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             await recordResult('loss', 'Abandonment');
         }
 
-        // Clean out game state immediately on logout click
-        setActiveGameId(null);
-        setOpponent(null);
-        resetMatch(300);
-        setStatusKey("waitingToStart");
-        setCustomStatus("");
-        setStats({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0, stripeAccountId: null });
-
         onLogout();
     };
 
@@ -814,7 +802,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             playMoveSound(moveResult, gameRef.current);
                             if (moveResult.captured) triggerCaptureEffects(payload.to, moveResult.color === 'w' ? 'b' : 'w');
 
-                            // Guaranteed atomic move-update syncing mechanism for the opponent
                             setMoveHistory(prev => {
                                 const next = [...prev, payload.moveSan];
                                 setCurrentMoveIndex(next.length);
