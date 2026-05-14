@@ -482,7 +482,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         fetchCommunityComments();
         fetchActiveGame();
 
-    }, [userEmail]); // <-- This hook handles initial data fetching & state wiping synchronously
+    }, [userEmail]);
 
     useEffect(() => {
         if (!userEmail) return;
@@ -802,11 +802,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             playMoveSound(moveResult, gameRef.current);
                             if (moveResult.captured) triggerCaptureEffects(payload.to, moveResult.color === 'w' ? 'b' : 'w');
 
-                            setMoveHistory(prev => {
-                                const next = [...prev, payload.moveSan];
-                                setCurrentMoveIndex(next.length);
-                                return next;
-                            });
+                            // 🔥 Fix: Functional updates separated so React correctly renders the new index
+                            setMoveHistory(prev => [...prev, payload.moveSan]);
+                            setCurrentMoveIndex(prev => prev + 1);
                         }
                     } catch (e) { console.error("Broadcast Move Error:", e); }
                 }
@@ -1018,6 +1016,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             if (move) {
                 playMoveSound(move, gameRef.current);
                 if (move.captured) triggerCaptureEffects(square, move.color === 'w' ? 'b' : 'w');
+
                 const nextHistory = [...moveHistory, move.san];
                 setMoveHistory(nextHistory);
                 setCurrentMoveIndex(nextHistory.length);
@@ -1052,11 +1051,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         playMoveSound(moveData, gameRef.current);
                         if (moveData.captured) triggerCaptureEffects(moveData.to, moveData.color === 'w' ? 'b' : 'w');
 
-                        setMoveHistory(prev => {
-                            const next = [...prev, bestMove];
-                            setCurrentMoveIndex(next.length);
-                            return next;
-                        });
+                        setMoveHistory(prev => [...prev, bestMove]);
+                        setCurrentMoveIndex(prev => prev + 1);
                     }
                 } catch (e) {
                     console.error("Computer logic error:", e);
