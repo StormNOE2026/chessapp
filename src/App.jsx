@@ -381,6 +381,27 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const gameRef = useRef(new Chess());
     useEffect(() => { opponentRef.current = opponent; }, [opponent]);
 
+    // 🔥 NEW: Reset everything when the user changes or logs out 🔥
+    useEffect(() => {
+        if (!userEmail) {
+            setActiveGameId(null);
+            setOpponent(null);
+            setMoveHistory([]);
+            setCurrentMoveIndex(0);
+            setMoveFrom('');
+            setIsPlayingComputer(false);
+            setChallengeTime(600);
+            setWagerAmount(0);
+            setCurrentStake(0);
+            setWhiteTime(300);
+            setBlackTime(300);
+            setStatusKey("waitingToStart");
+            setCustomStatus("");
+            setStats({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0, stripeAccountId: null });
+            gameRef.current = new Chess();
+        }
+    }, [userEmail]);
+
     useEffect(() => {
         if (!userEmail) return;
 
@@ -738,6 +759,15 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             await lobbyChannel.send({ type: 'broadcast', event: 'disconnect', payload: { targetEmail: opponentRef.current } }).catch(() => { });
             await recordResult('loss', 'Abandonment');
         }
+
+        // Clean out game state immediately on logout click
+        setActiveGameId(null);
+        setOpponent(null);
+        resetMatch(300);
+        setStatusKey("waitingToStart");
+        setCustomStatus("");
+        setStats({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0, stripeAccountId: null });
+
         onLogout();
     };
 
