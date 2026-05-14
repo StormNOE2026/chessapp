@@ -251,8 +251,18 @@ function AuthModal({ onAuthSuccess, onClose, language }) {
         const cleanEmail = email.trim().toLowerCase();
         let { data, error } = isLogin ? await supabase.auth.signInWithPassword({ email: cleanEmail, password }) : await supabase.auth.signUp({ email: cleanEmail, password });
         setLoading(false);
-        if (error) alert(error.message);
-        else if (data?.user) onAuthSuccess(data.user);
+        if (error) {
+            alert(error.message);
+        } else if (data?.user) {
+            // ==========================================
+            // 🔥 GOOGLE ADS SIGN-UP CONVERSION TRACKING
+            // ==========================================
+            if (!isLogin && typeof window !== 'undefined' && typeof window.gtag === 'function') {
+                window.gtag('event', 'conversion', { 'send_to': 'AW-595827979/hQYSCPbf-KwcEIu6jpwC' });
+            }
+
+            onAuthSuccess(data.user);
+        }
     };
 
     return (
