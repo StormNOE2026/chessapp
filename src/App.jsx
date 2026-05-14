@@ -381,9 +381,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const gameRef = useRef(new Chess());
     useEffect(() => { opponentRef.current = opponent; }, [opponent]);
 
-    // 🔥 Fix: Nuke all local state when the account actually changes / signs out
     useEffect(() => {
-        // Completely wipe standard match variables instantly when userEmail changes
         setActiveGameId(null);
         setOpponent(null);
         setMoveHistory([]);
@@ -408,7 +406,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             return;
         }
 
-        // Fresh login: Retrieve correct stats and active games
         const fetchUserStats = async () => {
             let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
             if (data) {
@@ -459,7 +456,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     setPlayerColor(isWhite ? 'w' : 'b');
                     setMoveHistory(parsedMoves);
                     setCurrentMoveIndex(parsedMoves.length);
-                    setChallengeTime(0); // Safely treat resumed game as untimed
+                    setChallengeTime(0);
                     setWhiteTime(Infinity);
                     setBlackTime(Infinity);
 
@@ -802,9 +799,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             playMoveSound(moveResult, gameRef.current);
                             if (moveResult.captured) triggerCaptureEffects(payload.to, moveResult.color === 'w' ? 'b' : 'w');
 
-                            // 🔥 Fix: Functional updates separated so React correctly renders the new index
-                            setMoveHistory(prev => [...prev, payload.moveSan]);
-                            setCurrentMoveIndex(prev => prev + 1);
+                            // 🔥 Fix: Force index update in next event loop tick so React 18 commits it properly
+                            setMoveHistory(prev => {
+                                const next = [...prev, payload.moveSan];
+                                setTimeout(() => setCurrentMoveIndex(next.length), 0);
+                                return next;
+                            });
                         }
                     } catch (e) { console.error("Broadcast Move Error:", e); }
                 }
@@ -1051,8 +1051,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         playMoveSound(moveData, gameRef.current);
                         if (moveData.captured) triggerCaptureEffects(moveData.to, moveData.color === 'w' ? 'b' : 'w');
 
-                        setMoveHistory(prev => [...prev, bestMove]);
-                        setCurrentMoveIndex(prev => prev + 1);
+                        // 🔥 Fix applied here for computer logic safety too
+                        setMoveHistory(prev => {
+                            const next = [...prev, bestMove];
+                            setTimeout(() => setCurrentMoveIndex(next.length), 0);
+                            return next;
+                        });
                     }
                 } catch (e) {
                     console.error("Computer logic error:", e);
