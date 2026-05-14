@@ -96,7 +96,7 @@ const translations = {
         needAccount: "Serve un account? Iscriviti", haveAccount: "Hai un account? Accedi",
         waitingToStart: "In attesa di iniziare...", gameStarted: "Gioco iniziato!", yourTurn: "🟢 Il tuo turno",
         waiting: "🔴 In attesa...", timeOut: "Tempo scaduto!", checkmate: "Scacco matto!",
-        gameIsDraw: "Il gioco è patta!", youWin: "Hai Vinto!", youLose: "Hai Perso!",
+        gameIsDraw: "Il gioco patta!", youWin: "Hai Vinto!", youLose: "Hai Perso!",
         opponentResigned: "L'avversario ha abbandonato. Hai Vinto!", youResigned: "Hai abbandonato. Hai Perso!",
         drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata.",
         opponentDisconnected: "Avversario disconnesso. Hai Vinto!"
@@ -434,10 +434,24 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         return () => clearTimeout(timer);
     }, [isAutoPlaying, currentMoveIndex, moveHistory, replayInfo]);
 
-    // 🔥 NEW: Fetch persistent game on login 🔥
+    // 1. Fetch general community and user stats only when the email loads
     useEffect(() => {
+        if (!userEmail) return;
+        fetchUserStats();
+        fetchAllMembers();
+        fetchTvGames();
+        fetchChessComTv();
+        fetchCommunityComments();
+    }, [userEmail]);
+
+    // 2. Fetch the persistent game safely without interrupting live gameplay
+    useEffect(() => {
+        if (!userEmail) return;
+
         const fetchActiveGame = async () => {
-            if (!user) return;
+            // Prevent fetching and overriding if a game is already active on the screen
+            if (activeGameIdRef.current) return;
+
             try {
                 const { data } = await supabase
                     .from('games')
@@ -461,21 +475,28 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     setPlayerColor(isWhite ? 'w' : 'b');
                     setMoveHistory(parsedMoves);
                     setCurrentMoveIndex(parsedMoves.length);
-                    setChallengeTime(0); // Safest to treat resumed games as untimed or load from DB if stored
+                    setChallengeTime(0); // Treat resumed games as untimed safely
                     setWhiteTime(Infinity);
                     setBlackTime(Infinity);
-                    setStatusKey("welcomeBack");
-                    setCustomStatus(" - Resumed");
+
+                    // Logic fix: Only say "Resumed" if moves were actually played
+                    if (parsedMoves.length === 0) {
+                        setStatusKey("gameStarted");
+                        setCustomStatus("");
+                    } else {
+                        setStatusKey("welcomeBack");
+                        setCustomStatus(" - Resumed");
+                        speak("Game Resumed", language);
+                    }
+
                     setIsPlayingComputer(false);
                     setIsGameOverManually(false);
-                    speak("Game Resumed", language);
                 }
             } catch (err) { console.error("Error fetching active game:", err); }
         };
 
-        fetchUserStats(); fetchAllMembers(); fetchTvGames(); fetchChessComTv(); fetchCommunityComments();
         fetchActiveGame();
-    }, [user, userEmail, language]);
+    }, [userEmail, language]);
 
     useEffect(() => {
         const fetchLocationAndSetAds = async () => {
@@ -713,7 +734,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     };
 
     const handleLogoutClick = async () => {
-        // Only trigger abandonment if it's NOT a no-time-limit game
         if (opponent && !isGameOverManually && lobbyChannel && challengeTimeRef.current !== 0) {
             setIsGameOverManually(true);
             await lobbyChannel.send({ type: 'broadcast', event: 'disconnect', payload: { targetEmail: opponentRef.current } }).catch(() => { });
@@ -724,7 +744,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     useEffect(() => {
         const handleTabClose = () => {
-            // Do not force forfeit if the game is untimed/persistent
             if (opponentRef.current && !isGameOverManuallyRef.current && lobbyChannel && challengeTimeRef.current !== 0) {
                 lobbyChannel.send({ type: 'broadcast', event: 'disconnect', payload: { targetEmail: opponentRef.current } }).catch(() => { });
             }
@@ -786,7 +805,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             })
             .on('broadcast', { event: 'drawDeclined' }, ({ payload }) => { if (userEmail && payload.targetEmail === userEmail) { setStatusKey("drawDeclined"); setCustomStatus(""); setIncomingDrawOffer(false); } })
             .on('broadcast', { event: 'disconnect' }, ({ payload }) => {
-                // Ensure untimed games do not automatically trigger a forfeit on disconnect
                 if (userEmail && payload.targetEmail === userEmail && !isGameOverManuallyRef.current && challengeTimeRef.current !== 0) {
                     setIsGameOverManually(true); setStatusKey("opponentDisconnected"); setCustomStatus(""); speak(t.opponentDisconnected, language); recordResult('win', 'Abandonment');
                 }
@@ -828,7 +846,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (isGameOver || isGameOverManually || currentMoveIndex < moveHistory.length || (!opponent && !isPlayingComputer)) { clearInterval(timerRef.current); return; }
 
         timerRef.current = setInterval(() => {
-            if (whiteTime === Infinity || blackTime === Infinity) return; // Freeze clock for Untimed
+            if (whiteTime === Infinity || blackTime === Infinity) return;
             if (displayGame.turn() === 'w') setWhiteTime(t => Math.max(0, t - 1)); else setBlackTime(t => Math.max(0, t - 1));
         }, 1000);
         return () => clearInterval(timerRef.current);
@@ -910,7 +928,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (!user || !lobbyChannel || !incomingChallenge) return;
         if (stats.balance < incomingChallenge.wagerAmount) { alert("Insufficient funds!"); return; }
 
-        // Save initial persistent game state in Database
         let gameId = null;
         try {
             const { data } = await supabase.from('games').insert([{
@@ -982,7 +999,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 setCurrentMoveIndex(nextHistory.length);
                 setMoveFrom('');
 
-                // Update persistent game in the database immediately
                 if (activeGameIdRef.current) {
                     supabase.from('games').update({ moves: nextHistory }).eq('id', activeGameIdRef.current).catch(err => console.error(err));
                 }
@@ -1023,7 +1039,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     }, [moveHistory, currentMoveIndex, opponent, isGameOverManually, isPlayingComputer]);
 
     const formatTime = (s) => {
-        if (s === Infinity) return "∞"; // Infinite Time Format
+        if (s === Infinity) return "∞";
         if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
         if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
         return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
