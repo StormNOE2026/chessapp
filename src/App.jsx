@@ -381,6 +381,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const gameRef = useRef(new Chess());
     useEffect(() => { opponentRef.current = opponent; }, [opponent]);
 
+    // 🔥 Fix: Nuke all local state when the account actually changes / signs out
     useEffect(() => {
         setActiveGameId(null);
         setOpponent(null);
@@ -799,12 +800,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             playMoveSound(moveResult, gameRef.current);
                             if (moveResult.captured) triggerCaptureEffects(payload.to, moveResult.color === 'w' ? 'b' : 'w');
 
-                            // 🔥 Fix: Force index update in next event loop tick so React 18 commits it properly
-                            setMoveHistory(prev => {
-                                const next = [...prev, payload.moveSan];
-                                setTimeout(() => setCurrentMoveIndex(next.length), 0);
-                                return next;
-                            });
+                            // 🔥 Fix: Safe batched update avoiding functional update lockouts
+                            setMoveHistory(prev => [...prev, payload.moveSan]);
+                            setCurrentMoveIndex(moveHistoryRef.current.length + 1);
                         }
                     } catch (e) { console.error("Broadcast Move Error:", e); }
                 }
@@ -847,12 +845,13 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (opponent && !isGameOverManually && challengeTime !== 0) {
             const isOpponentInGame = onlineUsers.some(u => u.email === opponent && u.isPlaying);
             if (!isOpponentInGame) {
+                // 🔥 Fix: Increased timeout to 10 seconds to allow standard Wi-Fi / connection stutters to recover
                 const checkTimeout = setTimeout(() => {
                     const stillOffline = !onlineUsersRef.current.some(u => u.email === opponent && u.isPlaying);
                     if (stillOffline && !isGameOverManuallyRef.current && challengeTimeRef.current !== 0) {
                         setIsGameOverManually(true); setStatusKey("opponentDisconnected"); setCustomStatus(""); speak(t.opponentDisconnected, language); recordResult('win', 'Abandonment');
                     }
-                }, 3000);
+                }, 10000);
                 return () => clearTimeout(checkTimeout);
             }
         }
@@ -1019,6 +1018,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
                 const nextHistory = [...moveHistory, move.san];
                 setMoveHistory(nextHistory);
+
+                // 🔥 Fix: Update index outside of functional update entirely.
                 setCurrentMoveIndex(nextHistory.length);
                 setMoveFrom('');
 
@@ -1051,12 +1052,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         playMoveSound(moveData, gameRef.current);
                         if (moveData.captured) triggerCaptureEffects(moveData.to, moveData.color === 'w' ? 'b' : 'w');
 
-                        // 🔥 Fix applied here for computer logic safety too
-                        setMoveHistory(prev => {
-                            const next = [...prev, bestMove];
-                            setTimeout(() => setCurrentMoveIndex(next.length), 0);
-                            return next;
-                        });
+                        setMoveHistory(prev => [...prev, bestMove]);
+                        setCurrentMoveIndex(moveHistoryRef.current.length + 1);
                     }
                 } catch (e) {
                     console.error("Computer logic error:", e);
