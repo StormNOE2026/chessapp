@@ -510,6 +510,48 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setDepositAmount(amount); setShowPaymentModal(true);
     };
 
+    const handleWithdrawClick = async () => {
+        const amountStr = prompt("Enter amount to withdraw ($):", "10.00");
+        if (!amountStr) return;
+
+        const amount = parseFloat(amountStr);
+
+        if (isNaN(amount) || amount <= 0) {
+            alert("Please enter a valid amount greater than 0.");
+            return;
+        }
+
+        if (amount > stats.balance) {
+            alert(t.insufficientFunds || "Insufficient funds.");
+            return;
+        }
+
+        try {
+            // 🛑 CALLING THE BACKEND: Tell your server to talk to Stripe
+            const { data, error: backendError } = await supabase.functions.invoke('process-withdrawal', {
+                body: { amount: amount, userId: user.id }
+            });
+
+            if (backendError) throw new Error(backendError.message || "Server error during withdrawal.");
+
+            // ✅ STRIPE SUCCEEDED: Now we can safely deduct the balance in the database
+            const newBalance = parseFloat(stats.balance || 0) - amount;
+            setStats(prev => ({ ...prev, balance: newBalance }));
+
+            if (user) {
+                await supabase.from('profiles').update({ balance: newBalance }).eq('id', user.id);
+            }
+
+            alert(`Successfully initiated withdrawal of $${amount.toFixed(2)}! It may take a few days to reach your bank.`);
+
+        } catch (err) {
+            console.error("Withdrawal failed:", err);
+            alert("Failed to process withdrawal: " + err.message);
+        }
+    };
+
+
+
     const handlePaymentSuccess = async (amount) => {
         setShowPaymentModal(false);
         const newBalance = parseFloat(stats.balance || 0) + parseFloat(amount);
@@ -1025,6 +1067,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             <>
                                 <span style={{ fontSize: '14px', color: '#10b981', fontWeight: 'bold' }}>{t.balance}: ${parseFloat(stats.balance || 0).toFixed(2)}</span>
                                 <button onClick={handleAddFundsClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{t.addFunds}</button>
+                                <button onClick={handleWithdrawClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{t.withdraw}</button>
                                 <span style={{ fontSize: '14px', whiteSpace: 'nowrap', display: isMobile ? 'none' : 'inline' }}>{t.loggedIn}: <b style={{ color: '#38bdf8' }}>{userEmail.split('@')[0]}</b></span>
                                 <button onClick={handleLogoutClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>{t.logout}</button>
                             </>
