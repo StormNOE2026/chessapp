@@ -475,7 +475,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     setPlayerColor(isWhite ? 'w' : 'b');
                     setMoveHistory(parsedMoves);
                     setCurrentMoveIndex(parsedMoves.length);
-                    setChallengeTime(0); // Treat resumed games as untimed safely
+                    setChallengeTime(0);
                     setWhiteTime(Infinity);
                     setBlackTime(Infinity);
 
@@ -495,7 +495,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         };
 
         fetchActiveGame();
-    }, [userEmail, language]);
+    }, [userEmail]); // Stripped 'language' out so it only triggers on mount/login
 
     useEffect(() => {
         const fetchLocationAndSetAds = async () => {
@@ -769,7 +769,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             .on('broadcast', { event: 'accept' }, ({ payload }) => {
                 if (userEmail && payload.challengerEmail === userEmail) {
                     setActiveGameId(payload.gameId);
-                    setChallengeTime(payload.timeControl); // Fix 1: Ensure challenger updates local challengeTime state
+                    setChallengeTime(payload.timeControl);
                     setOpponent(payload.targetEmail); setIsPlayingComputer(false); setPlayerColor('w'); setCurrentStake(payload.wagerAmount || 0); resetMatch(payload.timeControl);
                     setStatusKey("gameStarted"); setCustomStatus(` $${payload.wagerAmount || 0}`);
                     speak(t.gameStarted, language);
@@ -784,9 +784,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             playMoveSound(moveResult, gameRef.current);
                             if (moveResult.captured) triggerCaptureEffects(payload.to, moveResult.color === 'w' ? 'b' : 'w');
 
-                            // Fix 2: Move index generation OUT of the functional update array
-                            setMoveHistory(prev => [...prev, payload.moveSan]);
-                            setCurrentMoveIndex(moveHistoryRef.current.length + 1);
+                            // Guaranteed atomic move-update syncing mechanism for the opponent
+                            setMoveHistory(prev => {
+                                const next = [...prev, payload.moveSan];
+                                setCurrentMoveIndex(next.length);
+                                return next;
+                            });
                         }
                     } catch (e) { console.error("Broadcast Move Error:", e); }
                 }
@@ -943,7 +946,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         } catch (err) { console.error("Database insert failed:", err); }
 
         setActiveGameId(gameId);
-        setChallengeTime(incomingChallenge.timeControl); // Fix 1: Ensure opponent updates local challengeTime state
+        setChallengeTime(incomingChallenge.timeControl);
 
         await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge.email, targetEmail: userEmail, timeControl: incomingChallenge.timeControl, wagerAmount: incomingChallenge.wagerAmount, gameId } });
         setOpponent(incomingChallenge.email); setIsPlayingComputer(false); setPlayerColor('b'); setCurrentStake(incomingChallenge.wagerAmount); resetMatch(incomingChallenge.timeControl);
@@ -1031,8 +1034,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     if (moveData) {
                         playMoveSound(moveData, gameRef.current);
                         if (moveData.captured) triggerCaptureEffects(moveData.to, moveData.color === 'w' ? 'b' : 'w');
-                        setMoveHistory(prev => [...prev, bestMove]);
-                        setCurrentMoveIndex(prev => prev + 1);
+
+                        setMoveHistory(prev => {
+                            const next = [...prev, bestMove];
+                            setCurrentMoveIndex(next.length);
+                            return next;
+                        });
                     }
                 } catch (e) {
                     console.error("Computer logic error:", e);
