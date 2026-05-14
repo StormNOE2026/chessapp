@@ -336,7 +336,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const timerRef = useRef(null);
     const mySocketId = useRef(Math.random().toString(36).substring(7));
-    const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0 });
+
+    // Updated state to include stripeAccountId
+    const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0, stripeAccountId: null });
 
     const [isGameOverManually, setIsGameOverManually] = useState(false);
     const [gunshotEnabled, setGunshotEnabled] = useState(true);
@@ -463,11 +465,19 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatMessages]);
     useEffect(() => { if (showCommunityChat && communityContainerRef.current) communityContainerRef.current.scrollTop = communityContainerRef.current.scrollHeight; }, [communityMessages, showCommunityChat]);
 
+    // Updated fetchUserStats to map stripe_account_id
     const fetchUserStats = async () => {
         if (!user) return;
         let { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (data) {
-            setStats({ wins: data.wins || 0, losses: data.losses || 0, draws: data.draws || 0, score: data.score !== undefined ? data.score : 100, balance: parseFloat(data.balance || 0) });
+            setStats({
+                wins: data.wins || 0,
+                losses: data.losses || 0,
+                draws: data.draws || 0,
+                score: data.score !== undefined ? data.score : 100,
+                balance: parseFloat(data.balance || 0),
+                stripeAccountId: data.stripe_account_id
+            });
         }
     };
 
@@ -510,47 +520,69 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setDepositAmount(amount); setShowPaymentModal(true);
     };
 
+    // Updated handleWithdrawClick for Stripe Connect Flow
     const handleWithdrawClick = async () => {
+        // SCENARIO 1: The user hasn't linked a debit card yet
+        if (!stats.stripeAccountId) {
+            const confirmOnboard = window.confirm("You need to securely link a debit card via Stripe before you can withdraw. Set it up now?");
+            if (!confirmOnboard) return;
+
+            try {
+                // Call the edge function to create their account and get the link
+                const { data, error } = await supabase.functions.invoke('create-connect-account', {
+                    body: { userId: user.id, email: user.email }
+                });
+
+                if (error) throw error;
+
+                // Save the new Stripe Account ID to your database immediately
+                await supabase.from('profiles').update({ stripe_account_id: data.stripeAccountId }).eq('id', user.id);
+
+                // Redirect them to Stripe's secure UI to type in their debit card
+                window.location.href = data.url;
+                return;
+            } catch (err) {
+                alert("Failed to initialize Stripe setup: " + err.message);
+                return;
+            }
+        }
+
+        // SCENARIO 2: The user already linked a card, process the withdrawal
         const amountStr = prompt("Enter amount to withdraw ($):", "10.00");
         if (!amountStr) return;
-
         const amount = parseFloat(amountStr);
 
         if (isNaN(amount) || amount <= 0) {
             alert("Please enter a valid amount greater than 0.");
             return;
         }
-
         if (amount > stats.balance) {
             alert(t.insufficientFunds || "Insufficient funds.");
             return;
         }
 
         try {
-            // 🛑 CALLING THE BACKEND: Tell your server to talk to Stripe
+            // Tell your backend to securely move the money
             const { data, error: backendError } = await supabase.functions.invoke('process-withdrawal', {
-                body: { amount: amount, userId: user.id }
+                body: { amount: amount, stripeAccountId: stats.stripeAccountId }
             });
 
-            if (backendError) throw new Error(backendError.message || "Server error during withdrawal.");
+            if (backendError) throw new Error(backendError.message || "Withdrawal failed on the server.");
 
-            // ✅ STRIPE SUCCEEDED: Now we can safely deduct the balance in the database
+            // Success! Deduct the balance from your database
             const newBalance = parseFloat(stats.balance || 0) - amount;
             setStats(prev => ({ ...prev, balance: newBalance }));
 
             if (user) {
                 await supabase.from('profiles').update({ balance: newBalance }).eq('id', user.id);
             }
-
-            alert(`Successfully initiated withdrawal of $${amount.toFixed(2)}! It may take a few days to reach your bank.`);
+            alert(`Success! $${amount.toFixed(2)} is being sent to your linked card.`);
 
         } catch (err) {
-            console.error("Withdrawal failed:", err);
+            console.error(err);
             alert("Failed to process withdrawal: " + err.message);
         }
     };
-
-
 
     const handlePaymentSuccess = async (amount) => {
         setShowPaymentModal(false);
