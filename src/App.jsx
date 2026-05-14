@@ -254,13 +254,9 @@ function AuthModal({ onAuthSuccess, onClose, language }) {
         if (error) {
             alert(error.message);
         } else if (data?.user) {
-            // ==========================================
-            // 🔥 GOOGLE ADS SIGN-UP CONVERSION TRACKING
-            // ==========================================
             if (!isLogin && typeof window !== 'undefined' && typeof window.gtag === 'function') {
                 window.gtag('event', 'conversion', { 'send_to': 'AW-595827979/hQYSCPbf-KwcEIu6jpwC' });
             }
-
             onAuthSuccess(data.user);
         }
     };
@@ -300,6 +296,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [moveHistory, setMoveHistory] = useState([]);
     const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
     const [moveFrom, setMoveFrom] = useState('');
+    const [activeGameId, setActiveGameId] = useState(null);
 
     const [statusKey, setStatusKey] = useState("waitingToStart");
     const [customStatus, setCustomStatus] = useState("");
@@ -335,7 +332,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [gamesHistoryList, setGamesHistoryList] = useState([]);
     const [isLoadingGames, setIsLoadingGames] = useState(false);
 
-    // 🔥 Replay State 🔥
     const [replayInfo, setReplayInfo] = useState(null);
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
 
@@ -347,7 +343,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const timerRef = useRef(null);
     const mySocketId = useRef(Math.random().toString(36).substring(7));
 
-    // Updated state to include stripeAccountId
     const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0, stripeAccountId: null });
 
     const [isGameOverManually, setIsGameOverManually] = useState(false);
@@ -372,6 +367,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const isGameOverManuallyRef = useRef(false);
     useEffect(() => { isGameOverManuallyRef.current = isGameOverManually; }, [isGameOverManually]);
+
+    const challengeTimeRef = useRef(challengeTime);
+    useEffect(() => { challengeTimeRef.current = challengeTime; }, [challengeTime]);
+
+    const activeGameIdRef = useRef(activeGameId);
+    useEffect(() => { activeGameIdRef.current = activeGameId; }, [activeGameId]);
 
     useEffect(() => { gunshotEnabledRef.current = gunshotEnabled; speakChatEnabledRef.current = speakChatEnabled; }, [gunshotEnabled, speakChatEnabled]);
     useEffect(() => { onlineUsersRef.current = onlineUsers; }, [onlineUsers]);
@@ -404,17 +405,14 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         B: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg', Q: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg', K: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg'
     };
 
-    // Calculate display board based on history
     const displayGame = new Chess();
     moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { console.error("History replay error", e); } });
 
-    // 🔥 NEW: Auto-play logic for replays 🔥
     useEffect(() => {
         let timer;
         if (replayInfo && isAutoPlaying && currentMoveIndex < moveHistory.length) {
             timer = setTimeout(() => {
                 try {
-                    // Create a temporary board to accurately simulate the next move and trigger sounds
                     const tempGame = new Chess();
                     moveHistory.slice(0, currentMoveIndex).forEach(m => tempGame.move(m));
                     const nextMove = tempGame.move(moveHistory[currentMoveIndex]);
@@ -429,16 +427,55 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     console.error("Auto-play sound error:", e);
                 }
                 setCurrentMoveIndex(prev => prev + 1);
-            }, 1000); // 1-second pause
+            }, 1000);
         } else if (currentMoveIndex >= moveHistory.length) {
             setIsAutoPlaying(false);
         }
         return () => clearTimeout(timer);
     }, [isAutoPlaying, currentMoveIndex, moveHistory, replayInfo]);
 
+    // 🔥 NEW: Fetch persistent game on login 🔥
     useEffect(() => {
+        const fetchActiveGame = async () => {
+            if (!user) return;
+            try {
+                const { data } = await supabase
+                    .from('games')
+                    .select('*')
+                    .or(`white_email.eq.${userEmail},black_email.eq.${userEmail}`)
+                    .eq('result', 'In Progress')
+                    .order('created_at', { ascending: false })
+                    .limit(1);
+
+                if (data && data.length > 0) {
+                    const g = data[0];
+                    const isWhite = g.white_email === userEmail;
+                    let parsedMoves = typeof g.moves === 'string' ? JSON.parse(g.moves) : (g.moves || []);
+
+                    // Restore Game Logic
+                    gameRef.current = new Chess();
+                    parsedMoves.forEach(m => gameRef.current.move(m));
+
+                    setActiveGameId(g.id);
+                    setOpponent(isWhite ? g.black_email : g.white_email);
+                    setPlayerColor(isWhite ? 'w' : 'b');
+                    setMoveHistory(parsedMoves);
+                    setCurrentMoveIndex(parsedMoves.length);
+                    setChallengeTime(0); // Safest to treat resumed games as untimed or load from DB if stored
+                    setWhiteTime(Infinity);
+                    setBlackTime(Infinity);
+                    setStatusKey("welcomeBack");
+                    setCustomStatus(" - Resumed");
+                    setIsPlayingComputer(false);
+                    setIsGameOverManually(false);
+                    speak("Game Resumed", language);
+                }
+            } catch (err) { console.error("Error fetching active game:", err); }
+        };
+
         fetchUserStats(); fetchAllMembers(); fetchTvGames(); fetchChessComTv(); fetchCommunityComments();
-    }, [user]);
+        fetchActiveGame();
+    }, [user, userEmail, language]);
 
     useEffect(() => {
         const fetchLocationAndSetAds = async () => {
@@ -475,10 +512,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     useEffect(() => { if (chatContainerRef.current) chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight; }, [chatMessages]);
     useEffect(() => { if (showCommunityChat && communityContainerRef.current) communityContainerRef.current.scrollTop = communityContainerRef.current.scrollHeight; }, [communityMessages, showCommunityChat]);
 
-    // Updated fetchUserStats to map stripe_account_id
     const fetchUserStats = async () => {
         if (!user) return;
-        let { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+        let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (data) {
             setStats({
                 wins: data.wins || 0,
@@ -493,7 +529,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const fetchGamesHistory = async () => {
         setIsLoadingGames(true);
-        const { data, error } = await supabase.from('games').select('*').order('created_at', { ascending: false }).limit(100);
+        const { data } = await supabase.from('games').select('*').order('created_at', { ascending: false }).limit(100);
         if (data) setGamesHistoryList(data);
         setIsLoadingGames(false);
     };
@@ -510,15 +546,23 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
         const whiteFailedToFinish = (color === 'b' && (reason === 'Abandonment' || reason === 'Resignation' || reason === 'Timeout'));
 
-        if (color === 'w' || isPlayingComputer || whiteFailedToFinish) {
+        if (color === 'w' || isPlayingComputer || whiteFailedToFinish || activeGameIdRef.current) {
             const opponentName = isPlayingComputer ? 'Computer' : (opponentRef.current || 'Guest');
             try {
-                await supabase.from('games').insert([{
-                    white_email: color === 'w' ? (userEmail || 'Guest') : opponentName,
-                    black_email: color === 'b' ? (userEmail || 'Guest') : opponentName,
-                    moves: currentMoves,
-                    result: resultText
-                }]);
+                if (activeGameIdRef.current) {
+                    await supabase.from('games').update({
+                        moves: currentMoves,
+                        result: resultText
+                    }).eq('id', activeGameIdRef.current);
+                    setActiveGameId(null);
+                } else {
+                    await supabase.from('games').insert([{
+                        white_email: color === 'w' ? (userEmail || 'Guest') : opponentName,
+                        black_email: color === 'b' ? (userEmail || 'Guest') : opponentName,
+                        moves: currentMoves,
+                        result: resultText
+                    }]);
+                }
             } catch (err) { }
         }
     };
@@ -530,25 +574,18 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setDepositAmount(amount); setShowPaymentModal(true);
     };
 
-    // Updated handleWithdrawClick for Stripe Connect Flow
     const handleWithdrawClick = async () => {
-        // SCENARIO 1: The user hasn't linked a debit card yet
         if (!stats.stripeAccountId) {
             const confirmOnboard = window.confirm("You need to securely link a debit card via Stripe before you can withdraw. Set it up now?");
             if (!confirmOnboard) return;
 
             try {
-                // Call the edge function to create their account and get the link
                 const { data, error } = await supabase.functions.invoke('create-connect-account', {
                     body: { userId: user.id, email: user.email }
                 });
 
                 if (error) throw error;
-
-                // Save the new Stripe Account ID to your database immediately
                 await supabase.from('profiles').update({ stripe_account_id: data.stripeAccountId }).eq('id', user.id);
-
-                // Redirect them to Stripe's secure UI to type in their debit card
                 window.location.href = data.url;
                 return;
             } catch (err) {
@@ -557,7 +594,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             }
         }
 
-        // SCENARIO 2: The user already linked a card, process the withdrawal
         const amountStr = prompt("Enter amount to withdraw ($):", "10.00");
         if (!amountStr) return;
         const amount = parseFloat(amountStr);
@@ -572,14 +608,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
 
         try {
-            // Tell your backend to securely move the money
-            const { data, error: backendError } = await supabase.functions.invoke('process-withdrawal', {
+            const { error: backendError } = await supabase.functions.invoke('process-withdrawal', {
                 body: { amount: amount, stripeAccountId: stats.stripeAccountId }
             });
 
             if (backendError) throw new Error(backendError.message || "Withdrawal failed on the server.");
 
-            // Success! Deduct the balance from your database
             const newBalance = parseFloat(stats.balance || 0) - amount;
             setStats(prev => ({ ...prev, balance: newBalance }));
 
@@ -587,7 +621,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 await supabase.from('profiles').update({ balance: newBalance }).eq('id', user.id);
             }
             alert(`Success! $${amount.toFixed(2)} is being sent to your linked card.`);
-
         } catch (err) {
             console.error(err);
             alert("Failed to process withdrawal: " + err.message);
@@ -671,14 +704,17 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const resetMatch = (timeControl = 300) => {
         gameRef.current = new Chess(); setMoveHistory([]); setCurrentMoveIndex(0);
-        setWhiteTime(timeControl); setBlackTime(timeControl); setMoveFrom('');
+        setWhiteTime(timeControl === 0 ? Infinity : timeControl);
+        setBlackTime(timeControl === 0 ? Infinity : timeControl);
+        setMoveFrom('');
         setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
         setReplayInfo(null);
         setIsAutoPlaying(false);
     };
 
     const handleLogoutClick = async () => {
-        if (opponent && !isGameOverManually && lobbyChannel) {
+        // Only trigger abandonment if it's NOT a no-time-limit game
+        if (opponent && !isGameOverManually && lobbyChannel && challengeTimeRef.current !== 0) {
             setIsGameOverManually(true);
             await lobbyChannel.send({ type: 'broadcast', event: 'disconnect', payload: { targetEmail: opponentRef.current } }).catch(() => { });
             await recordResult('loss', 'Abandonment');
@@ -688,7 +724,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     useEffect(() => {
         const handleTabClose = () => {
-            if (opponentRef.current && !isGameOverManuallyRef.current && lobbyChannel) {
+            // Do not force forfeit if the game is untimed/persistent
+            if (opponentRef.current && !isGameOverManuallyRef.current && lobbyChannel && challengeTimeRef.current !== 0) {
                 lobbyChannel.send({ type: 'broadcast', event: 'disconnect', payload: { targetEmail: opponentRef.current } }).catch(() => { });
             }
         };
@@ -713,6 +750,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             })
             .on('broadcast', { event: 'accept' }, ({ payload }) => {
                 if (userEmail && payload.challengerEmail === userEmail) {
+                    setActiveGameId(payload.gameId);
                     setOpponent(payload.targetEmail); setIsPlayingComputer(false); setPlayerColor('w'); setCurrentStake(payload.wagerAmount || 0); resetMatch(payload.timeControl);
                     setStatusKey("gameStarted"); setCustomStatus(` $${payload.wagerAmount || 0}`);
                     speak(t.gameStarted, language);
@@ -748,7 +786,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             })
             .on('broadcast', { event: 'drawDeclined' }, ({ payload }) => { if (userEmail && payload.targetEmail === userEmail) { setStatusKey("drawDeclined"); setCustomStatus(""); setIncomingDrawOffer(false); } })
             .on('broadcast', { event: 'disconnect' }, ({ payload }) => {
-                if (userEmail && payload.targetEmail === userEmail && !isGameOverManuallyRef.current) {
+                // Ensure untimed games do not automatically trigger a forfeit on disconnect
+                if (userEmail && payload.targetEmail === userEmail && !isGameOverManuallyRef.current && challengeTimeRef.current !== 0) {
                     setIsGameOverManually(true); setStatusKey("opponentDisconnected"); setCustomStatus(""); speak(t.opponentDisconnected, language); recordResult('win', 'Abandonment');
                 }
             })
@@ -763,22 +802,22 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }).subscribe();
 
         return () => { channel.untrack(); supabase.removeChannel(channel); supabase.removeChannel(commentsSub); };
-    }, [userEmail, language]);
+    }, [userEmail, language, t]);
 
     useEffect(() => {
-        if (opponent && !isGameOverManually) {
+        if (opponent && !isGameOverManually && challengeTime !== 0) {
             const isOpponentInGame = onlineUsers.some(u => u.email === opponent && u.isPlaying);
             if (!isOpponentInGame) {
                 const checkTimeout = setTimeout(() => {
                     const stillOffline = !onlineUsersRef.current.some(u => u.email === opponent && u.isPlaying);
-                    if (stillOffline && !isGameOverManuallyRef.current) {
+                    if (stillOffline && !isGameOverManuallyRef.current && challengeTimeRef.current !== 0) {
                         setIsGameOverManually(true); setStatusKey("opponentDisconnected"); setCustomStatus(""); speak(t.opponentDisconnected, language); recordResult('win', 'Abandonment');
                     }
                 }, 3000);
                 return () => clearTimeout(checkTimeout);
             }
         }
-    }, [onlineUsers, opponent, isGameOverManually, language, t]);
+    }, [onlineUsers, opponent, isGameOverManually, language, t, challengeTime]);
 
     useEffect(() => {
         if (lobbyChannel && userEmail) { lobbyChannel.track({ email: userEmail, socketId: mySocketId.current, isPlaying: !!(opponent || isPlayingComputer) }).catch(() => { }); }
@@ -789,10 +828,11 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (isGameOver || isGameOverManually || currentMoveIndex < moveHistory.length || (!opponent && !isPlayingComputer)) { clearInterval(timerRef.current); return; }
 
         timerRef.current = setInterval(() => {
+            if (whiteTime === Infinity || blackTime === Infinity) return; // Freeze clock for Untimed
             if (displayGame.turn() === 'w') setWhiteTime(t => Math.max(0, t - 1)); else setBlackTime(t => Math.max(0, t - 1));
         }, 1000);
         return () => clearInterval(timerRef.current);
-    }, [moveHistory, currentMoveIndex, isGameOverManually, opponent, isPlayingComputer]);
+    }, [moveHistory, currentMoveIndex, isGameOverManually, opponent, isPlayingComputer, whiteTime, blackTime]);
 
     useEffect(() => {
         if (!isGameOverManually && (whiteTime === 0 || blackTime === 0)) {
@@ -843,6 +883,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const handleSendChallenge = async (targetEmail) => {
         if (!user) { alert("Please login to challenge players."); return; }
+        if (activeGameId) { alert("You already have an active game in progress!"); return; }
         if (wagerAmount > stats.balance) { alert("Insufficient funds!"); return; }
         if (!lobbyChannel) return;
         setStatusKey(""); setCustomStatus(`Challenge sent for $${wagerAmount}...`);
@@ -868,7 +909,22 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const handleAcceptChallenge = async () => {
         if (!user || !lobbyChannel || !incomingChallenge) return;
         if (stats.balance < incomingChallenge.wagerAmount) { alert("Insufficient funds!"); return; }
-        await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge.email, targetEmail: userEmail, timeControl: incomingChallenge.timeControl, wagerAmount: incomingChallenge.wagerAmount } });
+
+        // Save initial persistent game state in Database
+        let gameId = null;
+        try {
+            const { data } = await supabase.from('games').insert([{
+                white_email: incomingChallenge.email,
+                black_email: userEmail,
+                moves: [],
+                result: 'In Progress'
+            }]).select();
+            if (data && data.length > 0) gameId = data[0].id;
+        } catch (err) { console.error("Database insert failed:", err); }
+
+        setActiveGameId(gameId);
+
+        await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge.email, targetEmail: userEmail, timeControl: incomingChallenge.timeControl, wagerAmount: incomingChallenge.wagerAmount, gameId } });
         setOpponent(incomingChallenge.email); setIsPlayingComputer(false); setPlayerColor('b'); setCurrentStake(incomingChallenge.wagerAmount); resetMatch(incomingChallenge.timeControl);
         setStatusKey("gameStarted"); setCustomStatus(` $${incomingChallenge.wagerAmount}`);
         speak(t.gameStarted, language); setIncomingChallenge(null);
@@ -926,6 +982,11 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 setCurrentMoveIndex(nextHistory.length);
                 setMoveFrom('');
 
+                // Update persistent game in the database immediately
+                if (activeGameIdRef.current) {
+                    supabase.from('games').update({ moves: nextHistory }).eq('id', activeGameIdRef.current).catch(err => console.error(err));
+                }
+
                 if (opponentRef.current && userEmail) {
                     lobbyChannel.send({ type: 'broadcast', event: 'move', payload: { targetEmail: opponentRef.current, moveSan: move.san, captured: !!move.captured, to: move.to } });
                 }
@@ -962,6 +1023,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     }, [moveHistory, currentMoveIndex, opponent, isGameOverManually, isPlayingComputer]);
 
     const formatTime = (s) => {
+        if (s === Infinity) return "∞"; // Infinite Time Format
         if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
         if (s >= 3600) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
         return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
@@ -1066,8 +1128,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                 setReplayInfo(g);
                                                 setPlayerColor('w');
                                                 setShowGamesPlayed(false);
-
-                                                // 🔥 START THE AUTO-REPLAY AND TTS 🔥
                                                 setIsAutoPlaying(true);
                                                 speak("Watch the game and see all the moves", language);
                                             }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
@@ -1143,7 +1203,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '560px', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
                         {incomingChallenge && (
                             <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
-                                <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)}) for 💰 ${incomingChallenge.wagerAmount}</span>
+                                <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({incomingChallenge.timeControl === 0 ? "Untimed" : formatTime(incomingChallenge.timeControl)}) for 💰 ${incomingChallenge.wagerAmount}</span>
                                 <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>{t.acceptBtn}</button>
                                 <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>{t.declineBtn}</button>
                             </div>
@@ -1189,7 +1249,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => { setIsAutoPlaying(false); setCurrentMoveIndex(0); }}>⏪</button>
                             <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => { setIsAutoPlaying(false); setCurrentMoveIndex(prev => Math.max(0, prev - 1)); }}>◀️</button>
 
-                            {/* 🔥 NEW: Play/Pause button for replays 🔥 */}
                             {replayInfo ? (
                                 <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => setIsAutoPlaying(prev => !prev)}>
                                     {isAutoPlaying ? '⏸️' : '▶️'}
@@ -1228,7 +1287,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                     <div style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                                         <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                                             <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>{t.time}:</span>
-                                            <select disabled={!user} value={challengeTime} onChange={(e) => setChallengeTime(Number(e.target.value))} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: user ? 'pointer' : 'not-allowed' }}>
+                                            <select disabled={!user || activeGameId} value={challengeTime} onChange={(e) => setChallengeTime(Number(e.target.value))} style={{ backgroundColor: '#333', color: 'white', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: (!user || activeGameId) ? 'not-allowed' : 'pointer' }}>
+                                                <option value={0}>No Time Limit</option>
                                                 <option value={600}>10 Mins</option>
                                                 <option value={1800}>30 Mins</option>
                                                 <option value={3600}>1 Hour</option>
@@ -1236,7 +1296,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                         </div>
                                         <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                                             <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>{t.wager}:</span>
-                                            <input disabled={!user} type="number" min="0" max={stats.balance || 0} value={wagerAmount} onChange={(e) => setWagerAmount(Number(e.target.value))} style={{ width: '60px', backgroundColor: '#333', color: '#10b981', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: user ? 'text' : 'not-allowed' }} />
+                                            <input disabled={!user || activeGameId} type="number" min="0" max={stats.balance || 0} value={wagerAmount} onChange={(e) => setWagerAmount(Number(e.target.value))} style={{ width: '60px', backgroundColor: '#333', color: '#10b981', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: (!user || activeGameId) ? 'not-allowed' : 'text' }} />
                                         </div>
                                     </div>
                                 )}
