@@ -555,8 +555,18 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const fetchGamesHistory = async () => {
         setIsLoadingGames(true);
-        const { data, error } = await supabase.from('games').select('*').order('created_at', { ascending: false }).limit(100);
-        if (data) setGamesHistoryList(data);
+        // Increased limit to ensure we still get a good list size after filtering
+        const { data, error } = await supabase.from('games').select('*').order('created_at', { ascending: false }).limit(200);
+        if (data) {
+            const filteredGames = data.filter(g => {
+                let parsedMoves = [];
+                try {
+                    parsedMoves = typeof g.moves === 'string' ? JSON.parse(g.moves) : (g.moves || []);
+                } catch (e) { parsedMoves = []; }
+                return parsedMoves.length > 10;
+            });
+            setGamesHistoryList(filteredGames);
+        }
         setIsLoadingGames(false);
     };
 
