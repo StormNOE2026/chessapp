@@ -1059,6 +1059,23 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     };
 
+    // 🌐 Handle Social Media Share
+    const handleSocialShare = (network, gameId) => {
+        const gameLink = `https://chessonline.eu.com/?replay=${gameId}`;
+        const encodedUrl = encodeURIComponent(gameLink);
+        let shareUrl = '';
+
+        if (network === 'facebook') {
+            shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`;
+        } else if (network === 'linkedin') {
+            shareUrl = `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}`;
+        }
+
+        if (shareUrl) {
+            window.open(shareUrl, '_blank', 'width=600,height=400,noopener,noreferrer');
+        }
+    };
+
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
             <style>{`@keyframes shatterPiece { 0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; } 70% { opacity: 0.8; } 100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; } }`}</style>
@@ -1086,7 +1103,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                     {dateStr} | Result: <b style={{ color: '#f59e0b' }}>{g.result?.toUpperCase()}</b> | Moves: {g.moves?.length || 0}
                                                 </div>
                                             </div>
-                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', justifyContent: 'flex-end', maxWidth: '250px' }}>
                                                 <button onClick={() => {
                                                     let parsedMoves = [];
                                                     try {
@@ -1109,8 +1126,16 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                     speak("Watch the game and see all the moves", language);
                                                 }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
 
-                                                <button onClick={() => handleShareGame(g.id)} style={{ backgroundColor: '#38bdf8', color: 'black', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
-                                                    {t.share || "Share"}
+                                                <button onClick={() => handleShareGame(g.id)} style={{ backgroundColor: '#f59e0b', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                                    📧 {t.share || "Email"}
+                                                </button>
+
+                                                <button onClick={() => handleSocialShare('facebook', g.id)} style={{ backgroundColor: '#1877F2', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                                    🔵 FB
+                                                </button>
+
+                                                <button onClick={() => handleSocialShare('linkedin', g.id)} style={{ backgroundColor: '#0A66C2', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                                    💼 IN
                                                 </button>
                                             </div>
                                         </div>
