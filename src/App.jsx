@@ -96,7 +96,7 @@ const translations = {
         needAccount: "Serve un account? Iscriviti", haveAccount: "Hai un account? Accedi",
         waitingToStart: "In attesa di iniziare...", gameStarted: "Gioco iniziato!", yourTurn: "🟢 Il tuo turno",
         waiting: "🔴 In attesa...", timeOut: "Tempo scaduto!", checkmate: "Scacco matto!",
-        gameIsDraw: "Il gioco è patta!", youWin: "Hai Vinto!", youLose: "Hai Perso!",
+        gameIsDraw: "Il gioco patta!", youWin: "Hai Vinto!", youLose: "Hai Perso!",
         opponentResigned: "L'avversario ha abbandonato. Hai Vinto!", youResigned: "Hai abbandonato. Hai Perso!",
         drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata.",
         opponentDisconnected: "Avversario disconnesso. Hai Vinto!"
@@ -104,13 +104,38 @@ const translations = {
 };
 
 // ==========================================
-// 🔊 SOUND ASSETS & TTS
+// 🔊 SOUND CACHE & TTS PRELOADER
 // ==========================================
 const sounds = {
     move: 'https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/move-self.mp3',
     capture: 'https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/capture.mp3',
     check: 'https://images.chesscomfiles.com/chess-themes/sounds/_MP3_/default/move-check.mp3',
     thunder: 'https://cdn.pixabay.com/download/audio/2022/03/15/audio_7845f4fae2.mp3',
+    shotgun: '/shotgun.mp3'
+};
+
+const audioCache = {};
+if (typeof window !== 'undefined') {
+    audioCache.move = new Audio(sounds.move);
+    audioCache.capture = new Audio(sounds.capture);
+    audioCache.check = new Audio(sounds.check);
+    audioCache.thunder = new Audio(sounds.thunder);
+    audioCache.shotgun = new Audio(sounds.shotgun);
+}
+
+const playSoundEffect = (key, allowOverlap = false) => {
+    try {
+        const sound = audioCache[key];
+        if (sound) {
+            if (allowOverlap) {
+                const clone = sound.cloneNode();
+                clone.play().catch(() => { });
+            } else {
+                sound.currentTime = 0;
+                sound.play().catch(err => console.warn(`Audio playback prevented for ${key}:`, err));
+            }
+        }
+    } catch (e) { console.error("Sound play error:", e); }
 };
 
 const speak = (text, langCode = 'EN') => {
@@ -440,11 +465,14 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, []);
 
+    // ==========================================
+    // ♟️ REALISTIC 3D CHESS PIECES
+    // ==========================================
     const pieceImages = {
-        p: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg', r: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg', n: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
-        b: 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg', q: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg', k: 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
-        P: 'https://upload.wikimedia.org/wikipedia/commons/4/45/Chess_plt45.svg', R: 'https://upload.wikimedia.org/wikipedia/commons/7/72/Chess_rlt45.svg', N: 'https://upload.wikimedia.org/wikipedia/commons/7/70/Chess_nlt45.svg',
-        B: 'https://upload.wikimedia.org/wikipedia/commons/b/b1/Chess_blt45.svg', Q: 'https://upload.wikimedia.org/wikipedia/commons/1/15/Chess_qlt45.svg', K: 'https://upload.wikimedia.org/wikipedia/commons/4/42/Chess_klt45.svg'
+        p: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bp.png', r: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/br.png', n: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bn.png',
+        b: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bb.png', q: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bq.png', k: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bk.png',
+        P: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/wp.png', R: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/wr.png', N: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/wn.png',
+        B: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/wb.png', Q: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/wq.png', K: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/wk.png'
     };
 
     // Calculate display board based on history
@@ -601,25 +629,28 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const playMoveSound = (move, gameInstance) => {
         try {
-            let audioUrl = sounds.move;
+            let type = 'move';
             let isCheck = false;
+
             if (typeof gameInstance.isCheck === 'function') isCheck = gameInstance.isCheck();
             else if (typeof gameInstance.inCheck === 'function') isCheck = gameInstance.inCheck();
             else if (typeof gameInstance.in_check === 'function') isCheck = gameInstance.in_check();
 
-            if (isCheck) { audioUrl = sounds.check; speak("Check", language); }
-            else if (move.captured) audioUrl = sounds.capture;
+            if (isCheck) {
+                type = 'check';
+                speak("Check", language);
+            } else if (move.captured) {
+                type = 'capture';
+            }
 
-            const audio = new Audio(audioUrl);
-            audio.play().catch(err => console.warn("Audio playback prevented by browser:", err));
+            playSoundEffect(type);
         } catch (e) { console.error("Sound logic error:", e); }
     };
 
     const triggerCaptureEffects = (square, capturedColor) => {
         try {
             if (gunshotEnabledRef.current) {
-                const audio = new Audio('/shotgun.mp3');
-                audio.play().catch(() => { });
+                playSoundEffect('shotgun');
             }
             setExplosion({ square, color: capturedColor });
             setTimeout(() => setExplosion(null), 1000);
@@ -781,8 +812,10 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             setStatusKey("checkmate"); setCustomStatus(` ${outcome}`);
             if (!isGameOverManually) {
                 setIsGameOverManually(true); speak(t.checkmate, language);
-                new Audio(sounds.thunder).play().catch(() => { });
-                if (gunshotEnabledRef.current) { for (let i = 0; i < 3; i++) setTimeout(() => new Audio('/shotgun.mp3').play().catch(() => { }), i * 400); }
+                playSoundEffect('thunder');
+                if (gunshotEnabledRef.current) {
+                    for (let i = 0; i < 3; i++) setTimeout(() => playSoundEffect('shotgun', true), i * 400);
+                }
                 recordResult(playerColor === loserColor ? 'loss' : 'win', 'Checkmate');
             }
         } else if (isDraw) {
@@ -1066,7 +1099,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                     speak("Watch the game and see all the moves", language);
                                                 }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
 
-                                                {/* 📩 NEW SHARE BUTTON */}
                                                 <button onClick={() => handleShareGame(g.id)} style={{ backgroundColor: '#38bdf8', color: 'black', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
                                                     {t.share || "Share"}
                                                 </button>
