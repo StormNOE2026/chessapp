@@ -43,7 +43,7 @@ const translations = {
         turnOffChatSpeak: "Turn off Chat Speak", turnOnChatSpeak: "Turn on Chat Speak",
         score: "SCORE", won: "WON", loss: "LOSS", statDraw: "DRAW", history: "HISTORY",
         gameChat: "GAME CHAT", chatLocked: "Chat locked", typeMessage: "Type message...",
-        travelDeals: "✈️ TRAVEL DEALS", menu: "MENU", coach: "Coach", watch: "Watch",
+        travelDeals: "✈️ TRAVEL DEALS", menu: "MENU", coach: "Coach", watch: "Watch", share: "Share",
         news: "News", community: "Community", online: "Online", members: "Members",
         gamesPlayed: "Games Played", replayMode: "REPLAY MODE",
         time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline", emailChallenge: "Email Challenge (10m)",
@@ -65,7 +65,7 @@ const translations = {
         turnOffChatSpeak: "Apagar voz de chat", turnOnChatSpeak: "Activar voz de chat",
         score: "PUNTOS", won: "VICTORIAS", loss: "DERROTAS", statDraw: "EMPATE", history: "HISTORIAL",
         gameChat: "CHAT DE JUEGO", chatLocked: "Chat bloqueado", typeMessage: "Escribe un mensaje...",
-        travelDeals: "✈️ OFERTAS DE VIAJE", menu: "MENÚ", coach: "Entrenador", watch: "Ver",
+        travelDeals: "✈️ OFERTAS DE VIAJE", menu: "MENÚ", coach: "Entrenador", watch: "Ver", share: "Compartir",
         news: "Noticias", community: "Comunidad", online: "En línea", members: "Miembros",
         gamesPlayed: "Partidas Jugadas", replayMode: "MODO REPETICIÓN",
         time: "TIEMPO", wager: "APUESTA", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar", emailChallenge: "Retar por Email (10m)",
@@ -87,7 +87,7 @@ const translations = {
         turnOffChatSpeak: "Spegni voce chat", turnOnChatSpeak: "Attiva voce chat",
         score: "PUNTI", won: "VINTE", loss: "PERSE", statDraw: "PATTE", history: "CRONOLOGIA",
         gameChat: "CHAT DI GIOCO", chatLocked: "Chat bloccata", typeMessage: "Scrivi messaggio...",
-        travelDeals: "✈️ OFFERTE VIAGGIO", menu: "MENU", coach: "Allenatore", watch: "Guarda",
+        travelDeals: "✈️ OFFERTE VIAGGIO", menu: "MENU", coach: "Allenatore", watch: "Guarda", share: "Condividi",
         news: "Notizie", community: "Comunità", online: "Online", members: "Membri",
         gamesPlayed: "Partite Giocate", replayMode: "MODALITÀ REPLAY",
         time: "TEMPO", wager: "PUNTATA", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta", emailChallenge: "Sfida via Email (10m)",
@@ -385,6 +385,61 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, [userEmail]);
 
+    // ==========================================
+    // 🔗 HANDLE INCOMING SHARED REPLAY LINKS
+    // ==========================================
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const replayGameId = params.get('replay');
+
+        if (replayGameId) {
+            const loadSharedGame = async () => {
+                const { data, error } = await supabase
+                    .from('games')
+                    .select('*')
+                    .eq('id', replayGameId)
+                    .single();
+
+                if (error || !data) {
+                    console.error("Failed to load shared game:", error);
+                    alert("Could not load the game. The link might be invalid or the game was deleted.");
+                } else {
+                    // Parse moves and start the replay
+                    let parsedMoves = [];
+                    try {
+                        parsedMoves = typeof data.moves === 'string' ? JSON.parse(data.moves) : (data.moves || []);
+                    } catch (e) {
+                        parsedMoves = [];
+                    }
+
+                    setMoveHistory(parsedMoves);
+                    setCurrentMoveIndex(0);
+                    setIsGameOverManually(true);
+                    setOpponent(null);
+                    setIsPlayingComputer(false);
+                    setStatusKey("");
+                    setCustomStatus("");
+                    setReplayInfo(data);
+                    setPlayerColor('w');
+
+                    // Start auto-playing
+                    setIsAutoPlaying(true);
+
+                    // Optional TTS
+                    if ('speechSynthesis' in window) {
+                        const msg = new SpeechSynthesisUtterance("Watch the game and see all the moves");
+                        window.speechSynthesis.speak(msg);
+                    }
+                }
+
+                // Clean the URL so refreshing doesn't reload the replay
+                window.history.replaceState({}, document.title, window.location.pathname);
+            };
+
+            loadSharedGame();
+        }
+    }, []);
+
     const pieceImages = {
         p: 'https://upload.wikimedia.org/wikipedia/commons/c/c7/Chess_pdt45.svg', r: 'https://upload.wikimedia.org/wikipedia/commons/f/ff/Chess_rdt45.svg', n: 'https://upload.wikimedia.org/wikipedia/commons/e/ef/Chess_ndt45.svg',
         b: 'https://upload.wikimedia.org/wikipedia/commons/9/98/Chess_bdt45.svg', q: 'https://upload.wikimedia.org/wikipedia/commons/4/47/Chess_qdt45.svg', k: 'https://upload.wikimedia.org/wikipedia/commons/f/f0/Chess_kdt45.svg',
@@ -396,13 +451,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const displayGame = new Chess();
     moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { console.error("History replay error", e); } });
 
-    // 🔥 NEW: Auto-play logic for replays 🔥
+    // 🔥 Auto-play logic for replays 🔥
     useEffect(() => {
         let timer;
         if (replayInfo && isAutoPlaying && currentMoveIndex < moveHistory.length) {
             timer = setTimeout(() => {
                 try {
-                    // Create a temporary board to accurately simulate the next move and trigger sounds
                     const tempGame = new Chess();
                     moveHistory.slice(0, currentMoveIndex).forEach(m => tempGame.move(m));
                     const nextMove = tempGame.move(moveHistory[currentMoveIndex]);
@@ -417,7 +471,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     console.error("Auto-play sound error:", e);
                 }
                 setCurrentMoveIndex(prev => prev + 1);
-            }, 1000); // 1-second pause
+            }, 1000);
         } else if (currentMoveIndex >= moveHistory.length) {
             setIsAutoPlaying(false);
         }
@@ -939,6 +993,29 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }
 
+    // 📩 Handle Game Share
+    const handleShareGame = async (gameId) => {
+        const targetEmail = window.prompt("Enter email address to send this game link to:");
+        if (!targetEmail) return;
+
+        try {
+            const gameLink = `https://chessonline.eu.com/?replay=${gameId}`;
+            const { error } = await supabase.functions.invoke('share-game-resend', {
+                body: {
+                    to: targetEmail,
+                    gameLink: gameLink,
+                    sender: userEmail
+                }
+            });
+
+            if (error) throw error;
+            alert(`Game link successfully sent to ${targetEmail}!`);
+        } catch (err) {
+            console.error("Error sharing game:", err);
+            alert("Failed to send the email. Ensure your Resend Edge Function is deployed.");
+        }
+    };
+
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
             <style>{`@keyframes shatterPiece { 0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; } 70% { opacity: 0.8; } 100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; } }`}</style>
@@ -966,27 +1043,34 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                     {dateStr} | Result: <b style={{ color: '#f59e0b' }}>{g.result?.toUpperCase()}</b> | Moves: {g.moves?.length || 0}
                                                 </div>
                                             </div>
-                                            <button onClick={() => {
-                                                let parsedMoves = [];
-                                                try {
-                                                    parsedMoves = typeof g.moves === 'string' ? JSON.parse(g.moves) : (g.moves || []);
-                                                } catch (e) { parsedMoves = []; }
+                                            <div style={{ display: 'flex', gap: '8px' }}>
+                                                <button onClick={() => {
+                                                    let parsedMoves = [];
+                                                    try {
+                                                        parsedMoves = typeof g.moves === 'string' ? JSON.parse(g.moves) : (g.moves || []);
+                                                    } catch (e) { parsedMoves = []; }
 
-                                                setMoveHistory(parsedMoves);
-                                                setCurrentMoveIndex(0);
-                                                setIsGameOverManually(true);
-                                                setOpponent(null);
-                                                setIsPlayingComputer(false);
-                                                setStatusKey("");
-                                                setCustomStatus("");
-                                                setReplayInfo(g);
-                                                setPlayerColor('w');
-                                                setShowGamesPlayed(false);
+                                                    setMoveHistory(parsedMoves);
+                                                    setCurrentMoveIndex(0);
+                                                    setIsGameOverManually(true);
+                                                    setOpponent(null);
+                                                    setIsPlayingComputer(false);
+                                                    setStatusKey("");
+                                                    setCustomStatus("");
+                                                    setReplayInfo(g);
+                                                    setPlayerColor('w');
+                                                    setShowGamesPlayed(false);
 
-                                                // 🔥 START THE AUTO-REPLAY AND TTS 🔥
-                                                setIsAutoPlaying(true);
-                                                speak("Watch the game and see all the moves", language);
-                                            }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
+                                                    // 🔥 START THE AUTO-REPLAY AND TTS 🔥
+                                                    setIsAutoPlaying(true);
+                                                    speak("Watch the game and see all the moves", language);
+                                                }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
+
+                                                {/* 📩 NEW SHARE BUTTON */}
+                                                <button onClick={() => handleShareGame(g.id)} style={{ backgroundColor: '#38bdf8', color: 'black', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>
+                                                    {t.share || "Share"}
+                                                </button>
+                                            </div>
                                         </div>
                                     );
                                 })
@@ -1088,7 +1172,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(8, 1fr)', border: '4px solid #2c2c2c', borderRadius: '4px', width: '100%', maxWidth: '100%' }}>{board}</div>
                     </div>
 
-                    {/* 3. MOVE HISTORY (Extracted and Placed Next To Board) */}
+                    {/* 3. MOVE HISTORY */}
                     <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', display: 'flex', flexDirection: 'column', width: '100%', maxWidth: isMobile ? '100%' : '180px', flexShrink: 0, height: isMobile ? '300px' : 'auto', margin: isMobile ? '0 auto' : '0', boxSizing: 'border-box' }}>
                         <h4 style={{ margin: '0 0 8px 0', fontSize: '12px', color: '#aaa', textAlign: 'center', textTransform: 'uppercase' }}>{t.history}</h4>
                         <div style={{ overflowY: 'auto', flexGrow: 1, fontSize: '12px' }}>
@@ -1104,7 +1188,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => { setIsAutoPlaying(false); setCurrentMoveIndex(0); }}>⏪</button>
                             <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => { setIsAutoPlaying(false); setCurrentMoveIndex(prev => Math.max(0, prev - 1)); }}>◀️</button>
 
-                            {/* 🔥 NEW: Play/Pause button for replays 🔥 */}
+                            {/* Play/Pause button for replays */}
                             {replayInfo ? (
                                 <button style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'white', fontSize: '18px' }} onClick={() => setIsAutoPlaying(prev => !prev)}>
                                     {isAutoPlaying ? '⏸️' : '▶️'}
