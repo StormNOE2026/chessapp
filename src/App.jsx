@@ -46,7 +46,7 @@ const translations = {
         travelDeals: "✈️ TRAVEL DEALS", menu: "MENU", coach: "Coach", watch: "Watch", share: "Share",
         news: "News", community: "Community", online: "Online", members: "Members",
         gamesPlayed: "Games Played", replayMode: "REPLAY MODE",
-        time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline", emailChallenge: "Email Challenge (10m)",
+        time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline", emailChallenge: "Email Challenge",
         welcomeBack: "Welcome Back", createAccount: "Create Account", signupFree: "Signup for free and play chess for free.",
         email: "Email", password: "Password", login: "Log In", signup: "Sign Up",
         needAccount: "Need an account? Sign up", haveAccount: "Have an account? Log in",
@@ -68,7 +68,7 @@ const translations = {
         travelDeals: "✈️ OFERTAS DE VIAJE", menu: "MENÚ", coach: "Entrenador", watch: "Ver", share: "Compartir",
         news: "Noticias", community: "Comunidad", online: "En línea", members: "Miembros",
         gamesPlayed: "Partidas Jugadas", replayMode: "MODO REPETICIÓN",
-        time: "TIEMPO", wager: "APUESTA", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar", emailChallenge: "Retar por Email (10m)",
+        time: "TIEMPO", wager: "APUESTA", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar", emailChallenge: "Retar por Email",
         welcomeBack: "Bienvenido", createAccount: "Crear Cuenta", signupFree: "Regístrate gratis, juega gratis.",
         email: "Correo", password: "Contraseña", login: "Iniciar Sesión", signup: "Registrarse",
         needAccount: "¿Necesitas cuenta? Regístrate", haveAccount: "¿Tienes cuenta? Inicia sesión",
@@ -90,7 +90,7 @@ const translations = {
         travelDeals: "✈️ OFFERTE VIAGGIO", menu: "MENU", coach: "Allenatore", watch: "Guarda", share: "Condividi",
         news: "Notizie", community: "Comunità", online: "Online", members: "Membri",
         gamesPlayed: "Partite Giocate", replayMode: "MODALITÀ REPLAY",
-        time: "TEMPO", wager: "PUNTATA", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta", emailChallenge: "Sfida via Email (10m)",
+        time: "TEMPO", wager: "PUNTATA", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta", emailChallenge: "Sfida via Email",
         welcomeBack: "Bentornato", createAccount: "Crea Account", signupFree: "Iscriviti e gioca gratis.",
         email: "Email", password: "Password", login: "Accedi", signup: "Iscriviti",
         needAccount: "Serve un account? Iscriviti", haveAccount: "Hai un account? Accedi",
@@ -864,10 +864,11 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const handleEmailChallenge = async (targetEmail) => {
         if (!user) { alert("Please login to challenge players."); return; }
-        if (window.confirm(`Send an email challenge for a 10-minute game to ${targetEmail}?`)) {
+        const timeLabel = challengeTime === 3600 ? "1-hour" : `${challengeTime / 60}-minute`;
+        if (window.confirm(`Send an email challenge for a ${timeLabel} game to ${targetEmail}?`)) {
             try {
                 const { error } = await supabase.functions.invoke('send-challenge-email', {
-                    body: { targetEmail: targetEmail, challengerEmail: userEmail, timeControl: 600 }
+                    body: { targetEmail: targetEmail, challengerEmail: userEmail, timeControl: challengeTime }
                 });
                 if (error) throw error;
                 alert(`Challenge email sent to ${targetEmail}!`);
@@ -1290,7 +1291,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                 </select>
                             </div>
                             <div style={{ maxHeight: '150px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '5px' }}>
-                                {viewMode === 'online' && (
+                                {(viewMode === 'online' || viewMode === 'all') && (
                                     <div style={{ marginBottom: '10px', display: 'flex', gap: '10px', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
                                         <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
                                             <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>{t.time}:</span>
@@ -1320,7 +1321,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                 onClick={() => handleEmailChallenge(u.email)}
                                                 style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#f97316', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', whiteSpace: 'nowrap' }}
                                             >
-                                                {t.emailChallenge}
+                                                {t.emailChallenge} ({challengeTime === 3600 ? '1h' : (challengeTime / 60) + 'm'})
                                             </button>
                                         )}
                                     </div>
