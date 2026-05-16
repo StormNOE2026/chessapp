@@ -350,6 +350,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [gamesHistoryList, setGamesHistoryList] = useState([]);
     const [isLoadingGames, setIsLoadingGames] = useState(false);
 
+    // 📰 News & Watch State
+    const [showNews, setShowNews] = useState(false);
+    const [chessNews, setChessNews] = useState([]);
+    const [isLoadingNews, setIsLoadingNews] = useState(false);
+    const [showWatch, setShowWatch] = useState(false);
+
     // 🔥 Replay State 🔥
     const [replayInfo, setReplayInfo] = useState(null);
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
@@ -553,9 +559,22 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     };
 
+    const fetchNews = async () => {
+        setIsLoadingNews(true);
+        try {
+            const res = await fetch('https://api.rss2json.com/v1/api.json?rss_url=https://www.chess.com/rss/news');
+            const data = await res.json();
+            if (data.status === 'ok') {
+                setChessNews(data.items.slice(0, 10));
+            }
+        } catch (error) {
+            console.error("Error fetching chess news:", error);
+        }
+        setIsLoadingNews(false);
+    };
+
     const fetchGamesHistory = async () => {
         setIsLoadingGames(true);
-        // Increased limit to ensure we still get a good list size after filtering
         const { data, error } = await supabase.from('games').select('*').order('created_at', { ascending: false }).limit(200);
         if (data) {
             const filteredGames = data.filter(g => {
@@ -1083,6 +1102,84 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
             {showPaymentModal && user && <Elements stripe={stripePromise}><CheckoutForm amount={depositAmount} userId={user.id} onSuccess={handlePaymentSuccess} onCancel={() => setShowPaymentModal(false)} /></Elements>}
 
+            {/* WATCH LIVE GAMES MODAL */}
+            {showWatch && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+                    <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '95%', maxWidth: '900px', border: '1px solid #333', position: 'relative', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+                        <button onClick={() => setShowWatch(false)} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                        <h3 style={{ color: '#38bdf8', marginTop: 0, textAlign: 'center' }}>👁️ Watch Live Games</h3>
+
+                        <div style={{ display: 'flex', gap: '20px', overflowY: 'auto', flexGrow: 1, marginTop: '10px', flexDirection: isMobile ? 'column' : 'row' }}>
+                            {/* Platform Matches */}
+                            <div style={{ flex: 1, backgroundColor: '#262421', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                                <h4 style={{ color: '#10b981', borderBottom: '1px solid #333', paddingBottom: '10px', marginTop: 0 }}>🟢 Platform Matches</h4>
+                                {onlineUsers.filter(u => u.isPlaying).length === 0 ? (
+                                    <div style={{ color: '#aaa', fontSize: '13px', textAlign: 'center', padding: '20px' }}>No platform games active.</div>
+                                ) : (
+                                    onlineUsers.filter(u => u.isPlaying).map((u, i) => (
+                                        <div key={i} style={{ backgroundColor: '#2c2c2c', padding: '12px', borderRadius: '6px', marginBottom: '8px', fontSize: '13px', color: 'white', borderLeft: '4px solid #10b981' }}>
+                                            ⚔️ <b>{u.email.split('@')[0]}</b> is playing
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            {/* Lichess TV */}
+                            <div style={{ flex: 1, backgroundColor: '#262421', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                                <h4 style={{ color: '#fbbf24', borderBottom: '1px solid #333', paddingBottom: '10px', marginTop: 0 }}>📺 Lichess TV</h4>
+                                {tvGames.length === 0 ? <div style={{ color: '#aaa', fontSize: '13px', textAlign: 'center', padding: '20px' }}>Loading games...</div> : tvGames.map((game, i) => (
+                                    <a key={i} href={game.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '12px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'block', marginBottom: '8px', transition: '0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#383838'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#2c2c2c'}>
+                                        <div style={{ fontSize: '11px', color: '#fbbf24', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '6px' }}>{game.channel}</div>
+                                        <div style={{ fontSize: '13px', display: 'flex', justifyContent: 'space-between' }}><span>⬜ {game.white}</span> <span style={{ color: '#888' }}>{game.whiteRating}</span></div>
+                                        <div style={{ fontSize: '13px', display: 'flex', justifyContent: 'space-between', marginTop: '4px' }}><span>⬛ {game.black}</span> <span style={{ color: '#888' }}>{game.blackRating}</span></div>
+                                    </a>
+                                ))}
+                            </div>
+
+                            {/* Chess.com Streams */}
+                            <div style={{ flex: 1, backgroundColor: '#262421', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                                <h4 style={{ color: '#38bdf8', borderBottom: '1px solid #333', paddingBottom: '10px', marginTop: 0 }}>🎥 Chess.com Streamers</h4>
+                                {chessComStreamers.length === 0 ? <div style={{ color: '#aaa', fontSize: '13px', textAlign: 'center', padding: '20px' }}>Loading streamers...</div> : chessComStreamers.map((streamer, i) => (
+                                    <a key={i} href={streamer.twitch_url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '10px', borderRadius: '6px', border: '1px solid #444', color: 'white', display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', transition: '0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#383838'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#2c2c2c'}>
+                                        <img src={streamer.avatar} alt={streamer.username} style={{ width: '40px', height: '40px', borderRadius: '50%', border: '2px solid #38bdf8' }} />
+                                        <div style={{ overflow: 'hidden' }}>
+                                            <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#10b981', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{streamer.username}</div>
+                                            <div style={{ fontSize: '11px', color: '#aaa', marginTop: '2px' }}>Live on Twitch</div>
+                                        </div>
+                                    </a>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showNews && (
+                <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
+                    <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '600px', border: '1px solid #333', position: 'relative', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                        <button onClick={() => setShowNews(false)} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                        <h3 style={{ color: '#38bdf8', marginTop: 0, textAlign: 'center' }}>📰 Top Chess News</h3>
+                        <div style={{ overflowY: 'auto', flexGrow: 1, marginTop: '10px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                            {isLoadingNews ? (
+                                <div style={{ textAlign: 'center', color: '#aaa', padding: '20px' }}>Loading the latest news...</div>
+                            ) : chessNews.length === 0 ? (
+                                <div style={{ textAlign: 'center', color: '#aaa', padding: '20px' }}>No news available at the moment.</div>
+                            ) : (
+                                chessNews.map((newsItem, idx) => (
+                                    <a key={idx} href={newsItem.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', backgroundColor: '#2c2c2c', padding: '15px', borderRadius: '6px', color: 'white', display: 'flex', flexDirection: 'column', gap: '8px', border: '1px solid #333', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#383838'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#2c2c2c'}>
+                                        <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#10b981' }}>{newsItem.title}</div>
+                                        <div style={{ fontSize: '12px', color: '#aaa' }}>{new Date(newsItem.pubDate).toLocaleString()}</div>
+                                        <div style={{ fontSize: '13px', color: '#ddd', lineHeight: '1.4' }}>
+                                            {newsItem.description.replace(/<[^>]+>/g, '').substring(0, 180)}...
+                                        </div>
+                                    </a>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {showGamesPlayed && (
                 <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000 }}>
                     <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '600px', border: '1px solid #333', position: 'relative', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
@@ -1158,6 +1255,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         if (item.label === t.community) { setShowCommunityChat(prev => !prev); setTimeout(() => document.getElementById('community-input')?.focus(), 100); }
                         else if (item.label === t.coach) { window.open('https://www.chess.com/play/coach', '_blank', 'noopener,noreferrer'); }
                         else if (item.label === t.gamesPlayed) { setShowGamesPlayed(true); fetchGamesHistory(); }
+                        else if (item.label === t.news) { setShowNews(true); fetchNews(); }
+                        else if (item.label === t.watch) { setShowWatch(true); fetchTvGames(); fetchChessComTv(); }
                     }} style={{ display: 'flex', alignItems: 'center', padding: '12px 18px', cursor: 'pointer', whiteSpace: 'nowrap', transition: 'background 0.2s', color: '#b0b0b0' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.1)'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                         <span style={{ fontSize: '22px', width: '30px', textAlign: 'center' }}>{item.icon}</span>
                         <span style={{ marginLeft: '10px', fontSize: '15px', fontWeight: 'bold', opacity: isSidebarHovered ? 1 : 0, transition: 'opacity 0.2s' }}>{item.label}</span>
