@@ -341,6 +341,13 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [chatInput, setChatInput] = useState('');
     const chatContainerRef = useRef(null);
 
+    // ==========================================
+    // 🎤 AUDIO RECORDING STATE
+    // ==========================================
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef(null);
+    const audioChunksRef = useRef([]);
+
     const [showCommunityChat, setShowCommunityChat] = useState(false);
     const [communityMessages, setCommunityMessages] = useState([]);
     const [communityInput, setCommunityInput] = useState('');
@@ -435,7 +442,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     console.error("Failed to load shared game:", error);
                     alert("Could not load the game. The link might be invalid or the game was deleted.");
                 } else {
-                    // Parse moves and start the replay
                     let parsedMoves = [];
                     try {
                         parsedMoves = typeof data.moves === 'string' ? JSON.parse(data.moves) : (data.moves || []);
@@ -453,17 +459,14 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     setReplayInfo(data);
                     setPlayerColor('w');
 
-                    // Start auto-playing
                     setIsAutoPlaying(true);
 
-                    // Optional TTS
                     if ('speechSynthesis' in window) {
                         const msg = new SpeechSynthesisUtterance("Watch the game and see all the moves");
                         window.speechSynthesis.speak(msg);
                     }
                 }
 
-                // Clean the URL so refreshing doesn't reload the replay
                 window.history.replaceState({}, document.title, window.location.pathname);
             };
 
@@ -481,7 +484,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         B: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/wb.png', Q: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/wq.png', K: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/wk.png'
     };
 
-    // Calculate display board based on history
     const displayGame = new Chess();
     moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { console.error("History replay error", e); } });
 
@@ -761,10 +763,13 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     } catch (e) { console.error("Broadcast Move Error:", e); }
                 }
             })
+            // ==========================================
+            // 🎤 UPDATED CHAT LISTENER FOR AUDIO PAYLOAD
+            // ==========================================
             .on('broadcast', { event: 'chat' }, ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail && payload.senderEmail === opponentRef.current) {
-                    setChatMessages(prev => [...prev, { text: payload.text, sender: payload.senderEmail }]);
-                    if (speakChatEnabledRef.current) speak(payload.text, language);
+                    setChatMessages(prev => [...prev, { text: payload.text, audio: payload.audio, sender: payload.senderEmail }]);
+                    if (speakChatEnabledRef.current && payload.text) speak(payload.text, language);
                 }
             })
             .on('broadcast', { event: 'resign' }, ({ payload }) => {
@@ -863,6 +868,60 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (!chatInput.trim() || !opponent) return;
         await lobbyChannel.send({ type: 'broadcast', event: 'chat', payload: { targetEmail: opponent, senderEmail: userEmail, text: chatInput } });
         setChatMessages(prev => [...prev, { text: chatInput, sender: userEmail }]); setChatInput('');
+    };
+
+    // ==========================================
+    // 🎤 AUDIO RECORDING METHODS
+    // ==========================================
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) audioChunksRef.current.push(event.data);
+            };
+
+            mediaRecorder.onstop = () => {
+                // 🛠️ FIX: Grab the correct MIME type from the recorder
+                const mimeType = mediaRecorder.mimeType || 'audio/webm';
+
+                // 🛠️ FIX: Apply the MIME type to the Blob
+                const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+
+                const reader = new FileReader();
+                reader.readAsDataURL(audioBlob);
+                reader.onloadend = async () => {
+                    const base64Audio = reader.result;
+                    if (!user || !opponent) return;
+
+                    await lobbyChannel.send({
+                        type: 'broadcast',
+                        event: 'chat',
+                        payload: { targetEmail: opponent, senderEmail: userEmail, text: '', audio: base64Audio }
+                    });
+
+                    setChatMessages(prev => [...prev, { text: '', audio: base64Audio, sender: userEmail }]);
+                };
+
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            mediaRecorder.start();
+            setIsRecording(true);
+        } catch (err) {
+            console.error("Error accessing microphone:", err);
+            alert("Microphone access is required to send audio messages.");
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+        }
     };
 
     const sendCommunityMessage = async (e) => {
@@ -1441,17 +1500,34 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             </div>
                         </div>
 
+                        {/* ========================================== */}
+                        {/* 🎤 UPDATED GAME CHAT UI WITH AUDIO BUTTON  */}
+                        {/* ========================================== */}
                         <div style={{ backgroundColor: '#1e1e1e', border: '1px solid #333', borderRadius: '8px', display: 'flex', flexDirection: 'column', height: '220px', flexShrink: 0 }}>
                             <div style={{ padding: '8px', borderBottom: '1px solid #333', fontSize: '12px', color: '#38bdf8', fontWeight: 'bold' }}>{t.gameChat}</div>
                             <div ref={chatContainerRef} style={{ flexGrow: 1, overflowY: 'auto', padding: '8px', fontSize: '13px' }}>
                                 {chatMessages.map((m, i) => (
                                     <div key={i} style={{ marginBottom: '8px', textAlign: m.sender === userEmail ? 'right' : 'left' }}>
-                                        <div style={{ display: 'inline-block', padding: '6px 10px', borderRadius: '12px', backgroundColor: m.sender === userEmail ? '#075e54' : '#333', maxWidth: '80%' }}>{m.text}</div>
+                                        <div style={{ display: 'inline-block', padding: '6px 10px', borderRadius: '12px', backgroundColor: m.sender === userEmail ? '#075e54' : '#333', maxWidth: '80%' }}>
+                                            {m.audio ? (
+                                                <audio controls src={m.audio} style={{ maxWidth: '200px', height: '30px', outline: 'none' }} />
+                                            ) : (
+                                                m.text
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                             <form onSubmit={sendChatMessage} style={{ display: 'flex', borderTop: '1px solid #333' }}>
                                 <input disabled={!user || !opponent} type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={!user ? t.chatLocked : (opponent ? t.typeMessage : t.chatLocked)} style={{ flexGrow: 1, padding: '10px', backgroundColor: 'transparent', color: 'white', border: 'none', outline: 'none', minWidth: 0 }} />
+                                <button
+                                    type="button"
+                                    disabled={!user || !opponent}
+                                    onClick={isRecording ? stopRecording : startRecording}
+                                    style={{ backgroundColor: isRecording ? '#ef4444' : '#f59e0b', border: 'none', color: 'white', padding: '0 10px', cursor: (!user || !opponent) ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}
+                                >
+                                    {isRecording ? '🛑' : '🎤'}
+                                </button>
                                 <button disabled={!user || !opponent} type="submit" style={{ backgroundColor: '#38bdf8', border: 'none', color: 'black', padding: '0 15px', fontWeight: 'bold', cursor: (!user || !opponent) ? 'not-allowed' : 'pointer' }}>{t.send}</button>
                             </form>
                         </div>
