@@ -353,7 +353,10 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const localStreamRef = useRef(null);
     const remoteAudioRef = useRef(null);
 
-    // Connect remote stream to the invisible HTML Audio element
+    // 🛡️ THE FIX: ICE Candidate Queue
+    // This prevents candidates from being dropped if they arrive before the peer connection is ready
+    const iceCandidateQueueRef = useRef([]);
+
     useEffect(() => {
         if (remoteAudioRef.current && remoteAudioStream) {
             remoteAudioRef.current.srcObject = remoteAudioStream;
@@ -771,7 +774,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             };
 
             pc.ontrack = (event) => {
-                setRemoteAudioStream(event.streams[0]);
+                const inboundStream = event.streams[0] || new MediaStream([event.track]);
+                setRemoteAudioStream(inboundStream);
+                if (remoteAudioRef.current) remoteAudioRef.current.srcObject = inboundStream;
             };
 
             const offer = await pc.createOffer();
@@ -794,6 +799,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             localStreamRef.current.getTracks().forEach(track => track.stop());
             localStreamRef.current = null;
         }
+        iceCandidateQueueRef.current = []; // Clear the ICE queue
         setRemoteAudioStream(null);
         setInVoiceCall(false);
 
@@ -863,9 +869,20 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             }
                         };
 
-                        pc.ontrack = (event) => setRemoteAudioStream(event.streams[0]);
+                        pc.ontrack = (event) => {
+                            const inboundStream = event.streams[0] || new MediaStream([event.track]);
+                            setRemoteAudioStream(inboundStream);
+                            if (remoteAudioRef.current) remoteAudioRef.current.srcObject = inboundStream;
+                        };
 
                         await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+
+                        // 🛡️ Flush queued ICE candidates that arrived before setRemoteDescription finished
+                        while (iceCandidateQueueRef.current.length > 0) {
+                            const candidate = iceCandidateQueueRef.current.shift();
+                            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+                        }
+
                         const answer = await pc.createAnswer();
                         await pc.setLocalDescription(answer);
 
@@ -880,13 +897,24 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 if (userEmail && payload.targetEmail === userEmail && peerConnectionRef.current) {
                     try {
                         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(payload.answer));
+
+                        // 🛡️ Flush queued ICE candidates for the caller
+                        while (iceCandidateQueueRef.current.length > 0) {
+                            const candidate = iceCandidateQueueRef.current.shift();
+                            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+                        }
                     } catch (e) { console.error("Error setting remote description:", e); }
                 }
             })
             .on('broadcast', { event: 'webrtc-ice' }, async ({ payload }) => {
-                if (userEmail && payload.targetEmail === userEmail && peerConnectionRef.current) {
+                if (userEmail && payload.targetEmail === userEmail) {
                     try {
-                        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+                        if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
+                            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+                        } else {
+                            // 🛡️ Safely queue candidates if the connection isn't ready yet
+                            iceCandidateQueueRef.current.push(payload.candidate);
+                        }
                     } catch (e) { console.error("Error adding ice candidate", e); }
                 }
             })
@@ -1283,8 +1311,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
             <style>{`@keyframes shatterPiece { 0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; } 70% { opacity: 0.8; } 100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; } }`}</style>
 
-            {/* INVISIBLE WEBRTC AUDIO ELEMENT */}
-            <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
+            {/* INVISIBLE WEBRTC AUDIO ELEMENT - PLAYSINLINE ENABLES IT FOR MOBILE */}
+            <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
 
             {showPaymentModal && user && <Elements stripe={stripePromise}><CheckoutForm amount={depositAmount} userId={user.id} onSuccess={handlePaymentSuccess} onCancel={() => setShowPaymentModal(false)} /></Elements>}
 
