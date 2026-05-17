@@ -55,7 +55,8 @@ const translations = {
         gameIsDraw: "The game is a Draw!", youWin: "You Win!", youLose: "You Lose!",
         opponentResigned: "Opponent resigned. You Win!", youResigned: "You resigned. You Lose!",
         drawOfferSent: "Draw offer sent...", drawAccepted: "Draw Accepted!", drawDeclined: "Draw offer declined.",
-        opponentDisconnected: "Opponent disconnected. You Win!"
+        opponentDisconnected: "Opponent disconnected. You Win!",
+        startCall: "📞 Start Call", endCall: "🔴 End Call"
     },
     ES: {
         balance: "Saldo", addFunds: "Añadir Fondos", withdraw: "Retirar", insufficientFunds: "Fondos insuficientes.", loggedIn: "Conectado", logout: "Salir",
@@ -77,7 +78,8 @@ const translations = {
         gameIsDraw: "¡El juego es un empate!", youWin: "¡Tú ganas!", youLose: "¡Pierdes!",
         opponentResigned: "El oponente se rindió. ¡Tú ganas!", youResigned: "Te rendiste. ¡Pierdes!",
         drawOfferSent: "Oferta de empate enviada...", drawAccepted: "¡Empate aceptado!", drawDeclined: "Oferta de empate rechazada.",
-        opponentDisconnected: "El oponente se desconectó. ¡Tú ganas!"
+        opponentDisconnected: "El oponente se desconectó. ¡Tú ganas!",
+        startCall: "📞 Llamar", endCall: "🔴 Colgar"
     },
     IT: {
         balance: "Saldo", addFunds: "Aggiungi Fondi", withdraw: "Ritira", insufficientFunds: "Fondi insufficienti.", loggedIn: "Connesso", logout: "Esci",
@@ -99,7 +101,8 @@ const translations = {
         gameIsDraw: "Il gioco patta!", youWin: "Hai Vinto!", youLose: "Hai Perso!",
         opponentResigned: "L'avversario ha abbandonato. Hai Vinto!", youResigned: "Hai abbandonato. Hai Perso!",
         drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata.",
-        opponentDisconnected: "Avversario disconnesso. Hai Vinto!"
+        opponentDisconnected: "Avversario disconnesso. Hai Vinto!",
+        startCall: "📞 Chiama", endCall: "🔴 Chiudi"
     }
 };
 
@@ -342,8 +345,22 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const chatContainerRef = useRef(null);
 
     // ==========================================
-    // 🎤 AUDIO RECORDING STATE
+    // 🎤 WEBRTC LIVE VOICE CHAT STATE
     // ==========================================
+    const [inVoiceCall, setInVoiceCall] = useState(false);
+    const [remoteAudioStream, setRemoteAudioStream] = useState(null);
+    const peerConnectionRef = useRef(null);
+    const localStreamRef = useRef(null);
+    const remoteAudioRef = useRef(null);
+
+    // Connect remote stream to the invisible HTML Audio element
+    useEffect(() => {
+        if (remoteAudioRef.current && remoteAudioStream) {
+            remoteAudioRef.current.srcObject = remoteAudioStream;
+        }
+    }, [remoteAudioStream]);
+
+    // Push-to-talk recording state
     const [isRecording, setIsRecording] = useState(false);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
@@ -707,6 +724,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
         setReplayInfo(null);
         setIsAutoPlaying(false);
+        endVoiceCall(false); // Cleanup any existing voice calls
     };
 
     const handleLogoutClick = async () => {
@@ -715,6 +733,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             await lobbyChannel.send({ type: 'broadcast', event: 'disconnect', payload: { targetEmail: opponentRef.current } }).catch(() => { });
             await recordResult('loss', 'Abandonment');
         }
+        endVoiceCall(true);
         onLogout();
     };
 
@@ -723,10 +742,65 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             if (opponentRef.current && !isGameOverManuallyRef.current && lobbyChannel) {
                 lobbyChannel.send({ type: 'broadcast', event: 'disconnect', payload: { targetEmail: opponentRef.current } }).catch(() => { });
             }
+            endVoiceCall(true);
         };
         window.addEventListener('beforeunload', handleTabClose);
         return () => window.removeEventListener('beforeunload', handleTabClose);
     }, [lobbyChannel]);
+
+    // ==========================================
+    // 📞 WEBRTC VOICE CALL METHODS
+    // ==========================================
+    const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+
+    const startVoiceCall = async () => {
+        if (!opponent) return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            localStreamRef.current = stream;
+
+            const pc = new RTCPeerConnection(rtcConfig);
+            peerConnectionRef.current = pc;
+
+            stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate && lobbyChannel) {
+                    lobbyChannel.send({ type: 'broadcast', event: 'webrtc-ice', payload: { targetEmail: opponent, candidate: event.candidate, sender: userEmail } });
+                }
+            };
+
+            pc.ontrack = (event) => {
+                setRemoteAudioStream(event.streams[0]);
+            };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+
+            lobbyChannel.send({ type: 'broadcast', event: 'webrtc-offer', payload: { targetEmail: opponent, offer, sender: userEmail } });
+            setInVoiceCall(true);
+        } catch (err) {
+            console.error("Error starting voice call:", err);
+            alert("Microphone access is required to start a voice call.");
+        }
+    };
+
+    const endVoiceCall = (broadcast = true) => {
+        if (peerConnectionRef.current) {
+            peerConnectionRef.current.close();
+            peerConnectionRef.current = null;
+        }
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => track.stop());
+            localStreamRef.current = null;
+        }
+        setRemoteAudioStream(null);
+        setInVoiceCall(false);
+
+        if (broadcast && opponentRef.current && lobbyChannel) {
+            lobbyChannel.send({ type: 'broadcast', event: 'webrtc-end', payload: { targetEmail: opponentRef.current } });
+        }
+    };
 
     useEffect(() => {
         const channel = supabase.channel('chess-lobby'); setLobbyChannel(channel);
@@ -763,13 +837,62 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     } catch (e) { console.error("Broadcast Move Error:", e); }
                 }
             })
-            // ==========================================
-            // 🎤 UPDATED CHAT LISTENER FOR AUDIO PAYLOAD
-            // ==========================================
             .on('broadcast', { event: 'chat' }, ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail && payload.senderEmail === opponentRef.current) {
                     setChatMessages(prev => [...prev, { text: payload.text, audio: payload.audio, sender: payload.senderEmail }]);
                     if (speakChatEnabledRef.current && payload.text) speak(payload.text, language);
+                }
+            })
+            // ==========================================
+            // 📡 WEBRTC SIGNALING HANDLERS
+            // ==========================================
+            .on('broadcast', { event: 'webrtc-offer' }, async ({ payload }) => {
+                if (userEmail && payload.targetEmail === userEmail) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        localStreamRef.current = stream;
+
+                        const pc = new RTCPeerConnection(rtcConfig);
+                        peerConnectionRef.current = pc;
+
+                        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+
+                        pc.onicecandidate = (event) => {
+                            if (event.candidate && channel) {
+                                channel.send({ type: 'broadcast', event: 'webrtc-ice', payload: { targetEmail: payload.sender, candidate: event.candidate, sender: userEmail } });
+                            }
+                        };
+
+                        pc.ontrack = (event) => setRemoteAudioStream(event.streams[0]);
+
+                        await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+
+                        channel.send({ type: 'broadcast', event: 'webrtc-answer', payload: { targetEmail: payload.sender, answer, sender: userEmail } });
+                        setInVoiceCall(true);
+                    } catch (e) {
+                        console.error("Failed to answer WebRTC call:", e);
+                    }
+                }
+            })
+            .on('broadcast', { event: 'webrtc-answer' }, async ({ payload }) => {
+                if (userEmail && payload.targetEmail === userEmail && peerConnectionRef.current) {
+                    try {
+                        await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(payload.answer));
+                    } catch (e) { console.error("Error setting remote description:", e); }
+                }
+            })
+            .on('broadcast', { event: 'webrtc-ice' }, async ({ payload }) => {
+                if (userEmail && payload.targetEmail === userEmail && peerConnectionRef.current) {
+                    try {
+                        await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+                    } catch (e) { console.error("Error adding ice candidate", e); }
+                }
+            })
+            .on('broadcast', { event: 'webrtc-end' }, ({ payload }) => {
+                if (userEmail && payload.targetEmail === userEmail) {
+                    endVoiceCall(false); // don't broadcast back
                 }
             })
             .on('broadcast', { event: 'resign' }, ({ payload }) => {
@@ -785,6 +908,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             .on('broadcast', { event: 'disconnect' }, ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail && !isGameOverManuallyRef.current) {
                     setIsGameOverManually(true); setStatusKey("opponentDisconnected"); setCustomStatus(""); speak(t.opponentDisconnected, language); recordResult('win', 'Abandonment');
+                    endVoiceCall(false);
                 }
             })
             .subscribe(async (s) => {
@@ -797,7 +921,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             setCommunityMessages(prev => prev.find(m => m.id === payload.new.id) ? prev : [...prev, payload.new]);
         }).subscribe();
 
-        return () => { channel.untrack(); supabase.removeChannel(channel); supabase.removeChannel(commentsSub); };
+        return () => { channel.untrack(); supabase.removeChannel(channel); supabase.removeChannel(commentsSub); endVoiceCall(false); };
     }, [userEmail, language]);
 
     useEffect(() => {
@@ -808,6 +932,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     const stillOffline = !onlineUsersRef.current.some(u => u.email === opponent && u.isPlaying);
                     if (stillOffline && !isGameOverManuallyRef.current) {
                         setIsGameOverManually(true); setStatusKey("opponentDisconnected"); setCustomStatus(""); speak(t.opponentDisconnected, language); recordResult('win', 'Abandonment');
+                        endVoiceCall(false);
                     }
                 }, 3000);
                 return () => clearTimeout(checkTimeout);
@@ -871,7 +996,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     };
 
     // ==========================================
-    // 🎤 AUDIO RECORDING METHODS
+    // 🎤 PUSH TO TALK AUDIO RECORDING METHODS
     // ==========================================
     const startRecording = async () => {
         try {
@@ -885,10 +1010,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             };
 
             mediaRecorder.onstop = () => {
-                // 🛠️ FIX: Grab the correct MIME type from the recorder
                 const mimeType = mediaRecorder.mimeType || 'audio/webm';
-
-                // 🛠️ FIX: Apply the MIME type to the Blob
                 const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
 
                 const reader = new FileReader();
@@ -977,6 +1099,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (window.confirm("Are you sure you want to resign?")) {
             setIsGameOverManually(true); setStatusKey("youResigned"); setCustomStatus(""); speak(t.youResigned, language); recordResult('loss', 'Resignation');
             if (opponent) lobbyChannel.send({ type: 'broadcast', event: 'resign', payload: { targetEmail: opponentRef.current } });
+            endVoiceCall(true);
         }
     };
 
@@ -995,6 +1118,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const acceptDraw = () => {
         setIsGameOverManually(true); setStatusKey("drawAccepted"); setCustomStatus(""); speak(t.drawAccepted, language); recordResult('draw', 'Agreement'); setIncomingDrawOffer(false);
         if (opponent && userEmail) lobbyChannel.send({ type: 'broadcast', event: 'drawAccepted', payload: { targetEmail: opponentRef.current } });
+        endVoiceCall(true);
     };
 
     function onSquareClick(square) {
@@ -1158,6 +1282,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
             <style>{`@keyframes shatterPiece { 0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; } 70% { opacity: 0.8; } 100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; } }`}</style>
+
+            {/* INVISIBLE WEBRTC AUDIO ELEMENT */}
+            <audio ref={remoteAudioRef} autoPlay style={{ display: 'none' }} />
 
             {showPaymentModal && user && <Elements stripe={stripePromise}><CheckoutForm amount={depositAmount} userId={user.id} onSuccess={handlePaymentSuccess} onCancel={() => setShowPaymentModal(false)} /></Elements>}
 
@@ -1521,6 +1648,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             <form onSubmit={sendChatMessage} style={{ display: 'flex', borderTop: '1px solid #333' }}>
                                 <input disabled={!user || !opponent} type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={!user ? t.chatLocked : (opponent ? t.typeMessage : t.chatLocked)} style={{ flexGrow: 1, padding: '10px', backgroundColor: 'transparent', color: 'white', border: 'none', outline: 'none', minWidth: 0 }} />
                                 <button
+                                    title="Send Voice Note"
                                     type="button"
                                     disabled={!user || !opponent}
                                     onClick={isRecording ? stopRecording : startRecording}
@@ -1530,6 +1658,15 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                 </button>
                                 <button disabled={!user || !opponent} type="submit" style={{ backgroundColor: '#38bdf8', border: 'none', color: 'black', padding: '0 15px', fontWeight: 'bold', cursor: (!user || !opponent) ? 'not-allowed' : 'pointer' }}>{t.send}</button>
                             </form>
+                        </div>
+
+                        {/* 📞 LIVE VOICE CALL BUTTONS */}
+                        <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
+                            {!inVoiceCall ? (
+                                <button onClick={startVoiceCall} disabled={!user || !opponent} style={{ flex: 1, padding: '8px', backgroundColor: (!user || !opponent) ? '#333' : '#10b981', cursor: (!user || !opponent) ? 'not-allowed' : 'pointer', borderRadius: '4px', border: 'none', color: 'white', fontWeight: 'bold' }}>{t.startCall || "📞 Call"}</button>
+                            ) : (
+                                <button onClick={() => endVoiceCall(true)} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white', fontWeight: 'bold' }}>{t.endCall || "🔴 End Call"}</button>
+                            )}
                         </div>
 
                         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
