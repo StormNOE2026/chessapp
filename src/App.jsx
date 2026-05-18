@@ -56,7 +56,7 @@ const translations = {
         opponentResigned: "Opponent resigned. You Win!", youResigned: "You resigned. You Lose!",
         drawOfferSent: "Draw offer sent...", drawAccepted: "Draw Accepted!", drawDeclined: "Draw offer declined.",
         opponentDisconnected: "Opponent disconnected. You Win!",
-        startCall: "📞 Start Call", endCall: "🔴 End Call"
+        startCall: "📹 Start Video", endCall: "🔴 Stop Video"
     },
     ES: {
         balance: "Saldo", addFunds: "Añadir Fondos", withdraw: "Retirar", insufficientFunds: "Fondos insuficientes.", loggedIn: "Conectado", logout: "Salir",
@@ -79,7 +79,7 @@ const translations = {
         opponentResigned: "El oponente se rindió. ¡Tú ganas!", youResigned: "Te rendiste. ¡Pierdes!",
         drawOfferSent: "Oferta de empate enviada...", drawAccepted: "¡Empate aceptado!", drawDeclined: "Oferta de empate rechazada.",
         opponentDisconnected: "El oponente se desconectó. ¡Tú ganas!",
-        startCall: "📞 Llamar", endCall: "🔴 Colgar"
+        startCall: "📹 Video", endCall: "🔴 Colgar"
     },
     IT: {
         balance: "Saldo", addFunds: "Aggiungi Fondi", withdraw: "Ritira", insufficientFunds: "Fondi insufficienti.", loggedIn: "Connesso", logout: "Esci",
@@ -102,7 +102,7 @@ const translations = {
         opponentResigned: "L'avversario ha abbandonato. Hai Vinto!", youResigned: "Hai abbandonato. Hai Perso!",
         drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata.",
         opponentDisconnected: "Avversario disconnesso. Hai Vinto!",
-        startCall: "📞 Chiama", endCall: "🔴 Chiudi"
+        startCall: "📹 Video", endCall: "🔴 Chiudi"
     }
 };
 
@@ -345,23 +345,34 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const chatContainerRef = useRef(null);
 
     // ==========================================
-    // 🎤 WEBRTC LIVE VOICE CHAT STATE
+    // 📹 WEBRTC LIVE VIDEO CHAT STATE
     // ==========================================
     const [inVoiceCall, setInVoiceCall] = useState(false);
-    const [remoteAudioStream, setRemoteAudioStream] = useState(null);
+    const [remoteMediaStream, setRemoteMediaStream] = useState(null);
+    const [localMediaStream, setLocalMediaStream] = useState(null);
     const peerConnectionRef = useRef(null);
     const localStreamRef = useRef(null);
-    const remoteAudioRef = useRef(null);
+
+    // Video refs replacing the previous audio ref
+    const remoteVideoRef = useRef(null);
+    const localVideoRef = useRef(null);
 
     // 🛡️ THE FIX: ICE Candidate Queue
     // This prevents candidates from being dropped if they arrive before the peer connection is ready
     const iceCandidateQueueRef = useRef([]);
 
+    // Attach streams dynamically when available
     useEffect(() => {
-        if (remoteAudioRef.current && remoteAudioStream) {
-            remoteAudioRef.current.srcObject = remoteAudioStream;
+        if (remoteVideoRef.current && remoteMediaStream) {
+            remoteVideoRef.current.srcObject = remoteMediaStream;
         }
-    }, [remoteAudioStream]);
+    }, [remoteMediaStream, inVoiceCall]);
+
+    useEffect(() => {
+        if (localVideoRef.current && localMediaStream) {
+            localVideoRef.current.srcObject = localMediaStream;
+        }
+    }, [localMediaStream, inVoiceCall]);
 
     // Push-to-talk recording state
     const [isRecording, setIsRecording] = useState(false);
@@ -727,7 +738,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
         setReplayInfo(null);
         setIsAutoPlaying(false);
-        endVoiceCall(false); // Cleanup any existing voice calls
+        endVoiceCall(false); // Cleanup any existing voice/video calls
     };
 
     const handleLogoutClick = async () => {
@@ -752,15 +763,17 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     }, [lobbyChannel]);
 
     // ==========================================
-    // 📞 WEBRTC VOICE CALL METHODS
+    // 📹 WEBRTC VIDEO CALL METHODS
     // ==========================================
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     const startVoiceCall = async () => {
         if (!opponent) return;
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            // Request both video and audio
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             localStreamRef.current = stream;
+            setLocalMediaStream(stream);
 
             const pc = new RTCPeerConnection(rtcConfig);
             peerConnectionRef.current = pc;
@@ -775,8 +788,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
             pc.ontrack = (event) => {
                 const inboundStream = event.streams[0] || new MediaStream([event.track]);
-                setRemoteAudioStream(inboundStream);
-                if (remoteAudioRef.current) remoteAudioRef.current.srcObject = inboundStream;
+                setRemoteMediaStream(inboundStream);
+                if (remoteVideoRef.current) remoteVideoRef.current.srcObject = inboundStream;
             };
 
             const offer = await pc.createOffer();
@@ -785,8 +798,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             lobbyChannel.send({ type: 'broadcast', event: 'webrtc-offer', payload: { targetEmail: opponent, offer, sender: userEmail } });
             setInVoiceCall(true);
         } catch (err) {
-            console.error("Error starting voice call:", err);
-            alert("Microphone access is required to start a voice call.");
+            console.error("Error starting video call:", err);
+            alert("Camera and microphone access is required to start a video call.");
         }
     };
 
@@ -800,7 +813,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             localStreamRef.current = null;
         }
         iceCandidateQueueRef.current = []; // Clear the ICE queue
-        setRemoteAudioStream(null);
+        setRemoteMediaStream(null);
+        setLocalMediaStream(null);
         setInVoiceCall(false);
 
         if (broadcast && opponentRef.current && lobbyChannel) {
@@ -855,8 +869,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             .on('broadcast', { event: 'webrtc-offer' }, async ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail) {
                     try {
-                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                         localStreamRef.current = stream;
+                        setLocalMediaStream(stream);
 
                         const pc = new RTCPeerConnection(rtcConfig);
                         peerConnectionRef.current = pc;
@@ -871,8 +886,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
                         pc.ontrack = (event) => {
                             const inboundStream = event.streams[0] || new MediaStream([event.track]);
-                            setRemoteAudioStream(inboundStream);
-                            if (remoteAudioRef.current) remoteAudioRef.current.srcObject = inboundStream;
+                            setRemoteMediaStream(inboundStream);
+                            if (remoteVideoRef.current) remoteVideoRef.current.srcObject = inboundStream;
                         };
 
                         await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
@@ -1311,9 +1326,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
             <style>{`@keyframes shatterPiece { 0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; } 70% { opacity: 0.8; } 100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; } }`}</style>
 
-            {/* INVISIBLE WEBRTC AUDIO ELEMENT - PLAYSINLINE ENABLES IT FOR MOBILE */}
-            <audio ref={remoteAudioRef} autoPlay playsInline style={{ display: 'none' }} />
-
             {showPaymentModal && user && <Elements stripe={stripePromise}><CheckoutForm amount={depositAmount} userId={user.id} onSuccess={handlePaymentSuccess} onCancel={() => setShowPaymentModal(false)} /></Elements>}
 
             {/* WATCH LIVE GAMES MODAL */}
@@ -1584,6 +1596,21 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
                     {/* 4. STATS & CONTROLS */}
                     <aside style={{ width: '100%', maxWidth: isMobile ? '100%' : '260px', display: 'flex', flexDirection: 'column', gap: '15px', paddingRight: isMobile ? '0' : '5px', boxSizing: 'border-box', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
+
+                        {/* 📹 WEBRTC VIDEO FEEDS */}
+                        {inVoiceCall && (
+                            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', backgroundColor: '#1e1e1e', padding: '10px', borderRadius: '8px', border: '1px solid #333' }}>
+                                <div style={{ position: 'relative', width: '100px', height: '100px', backgroundColor: '#000', borderRadius: '6px', overflow: 'hidden', border: '2px solid #38bdf8' }}>
+                                    <video ref={localVideoRef} autoPlay playsInline muted style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    <span style={{ position: 'absolute', bottom: '2px', left: '4px', fontSize: '10px', color: '#fff', backgroundColor: 'rgba(0,0,0,0.6)', padding: '2px 4px', borderRadius: '3px' }}>You</span>
+                                </div>
+                                <div style={{ position: 'relative', width: '100px', height: '100px', backgroundColor: '#000', borderRadius: '6px', overflow: 'hidden', border: '2px solid #10b981' }}>
+                                    <video ref={remoteVideoRef} autoPlay playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    <span style={{ position: 'absolute', bottom: '2px', left: '4px', fontSize: '10px', color: '#fff', backgroundColor: 'rgba(0,0,0,0.6)', padding: '2px 4px', borderRadius: '3px' }}>Opponent</span>
+                                </div>
+                            </div>
+                        )}
+
                         <div style={{ backgroundColor: '#1e1e1e', padding: '12px', borderRadius: '8px', border: '1px solid #333', flexShrink: 0 }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', textAlign: 'center', width: '100%' }}>
                                 <div style={{ flex: 1 }}><div style={{ color: '#38bdf8', fontSize: '10px' }}>{t.score}</div><div style={{ fontSize: '16px' }}>{stats.score}</div></div>
@@ -1656,7 +1683,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         </div>
 
                         {/* ========================================== */}
-                        {/* 🎤 UPDATED GAME CHAT UI WITH AUDIO BUTTON  */}
+                        {/* 🎤 GAME CHAT UI WITH AUDIO BUTTON          */}
                         {/* ========================================== */}
                         <div style={{ backgroundColor: '#1e1e1e', border: '1px solid #333', borderRadius: '8px', display: 'flex', flexDirection: 'column', height: '220px', flexShrink: 0 }}>
                             <div style={{ padding: '8px', borderBottom: '1px solid #333', fontSize: '12px', color: '#38bdf8', fontWeight: 'bold' }}>{t.gameChat}</div>
@@ -1688,12 +1715,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             </form>
                         </div>
 
-                        {/* 📞 LIVE VOICE CALL BUTTONS */}
+                        {/* 📹 LIVE VIDEO CALL BUTTONS */}
                         <div style={{ display: 'flex', gap: '10px', flexShrink: 0 }}>
                             {!inVoiceCall ? (
-                                <button onClick={startVoiceCall} disabled={!user || !opponent} style={{ flex: 1, padding: '8px', backgroundColor: (!user || !opponent) ? '#333' : '#10b981', cursor: (!user || !opponent) ? 'not-allowed' : 'pointer', borderRadius: '4px', border: 'none', color: 'white', fontWeight: 'bold' }}>{t.startCall || "📞 Call"}</button>
+                                <button onClick={startVoiceCall} disabled={!user || !opponent} style={{ flex: 1, padding: '8px', backgroundColor: (!user || !opponent) ? '#333' : '#10b981', cursor: (!user || !opponent) ? 'not-allowed' : 'pointer', borderRadius: '4px', border: 'none', color: 'white', fontWeight: 'bold' }}>{t.startCall || "📹 Start Video"}</button>
                             ) : (
-                                <button onClick={() => endVoiceCall(true)} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white', fontWeight: 'bold' }}>{t.endCall || "🔴 End Call"}</button>
+                                <button onClick={() => endVoiceCall(true)} style={{ flex: 1, padding: '8px', backgroundColor: '#ef4444', cursor: 'pointer', borderRadius: '4px', border: 'none', color: 'white', fontWeight: 'bold' }}>{t.endCall || "🔴 Stop Video"}</button>
                             )}
                         </div>
 
