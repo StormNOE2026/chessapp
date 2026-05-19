@@ -8,7 +8,7 @@ import './App.css';
 // ==========================================
 const translations = {
     EN: {
-        loggedIn: "Logged in", logout: "Logout",
+        balance: "Balance", addFunds: "Add Funds", withdraw: "Withdraw", insufficientFunds: "Insufficient funds.", loggedIn: "Logged in", logout: "Logout",
         communityChat: "COMMUNITY CHAT", saySomething: "Say something...", send: "Send",
         actionDraw: "🤝 Draw", actionResign: "🏳️ Resign", playComputer: "Play Computer",
         turnOffGunshot: "Turn off gunshot", turnOnGunshot: "Turn on gunshot",
@@ -18,7 +18,7 @@ const translations = {
         travelDeals: "✈️ TRAVEL DEALS", menu: "MENU", coach: "Coach", watch: "Watch", share: "Share",
         news: "News", community: "Community", online: "Online", members: "Members",
         gamesPlayed: "Games Played", replayMode: "REPLAY MODE",
-        time: "TIME", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline", emailChallenge: "Email Challenge",
+        time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline", emailChallenge: "Email Challenge",
         welcomeBack: "Welcome Back", createAccount: "Create Account", signupFree: "Signup for free and play chess for free.",
         email: "Email", password: "Password", login: "Log In", signup: "Sign Up",
         needAccount: "Need an account? Sign up", haveAccount: "Have an account? Log in",
@@ -28,10 +28,13 @@ const translations = {
         opponentResigned: "Opponent resigned. You Win!", youResigned: "You resigned. You Lose!",
         drawOfferSent: "Draw offer sent...", drawAccepted: "Draw Accepted!", drawDeclined: "Draw offer declined.",
         opponentDisconnected: "Opponent disconnected. You Win!",
-        startCall: "📹 Start Video", endCall: "🔴 Stop Video"
+        startCall: "📹 Start Video", endCall: "🔴 Stop Video",
+        forgotPassword: "Forgot Password?", resetPassword: "Reset Password", sendResetLink: "Send Reset Link",
+        resetEmailSent: "Reset link sent! Check your email.", newPassword: "New Password", updatePassword: "Update Password",
+        passwordUpdated: "Password updated successfully!"
     },
     ES: {
-        loggedIn: "Conectado", logout: "Salir",
+        balance: "Saldo", addFunds: "Añadir Fondos", withdraw: "Retirar", insufficientFunds: "Fondos insuficientes.", loggedIn: "Conectado", logout: "Salir",
         communityChat: "CHAT COMUNIDAD", saySomething: "Di algo...", send: "Enviar",
         actionDraw: "🤝 Empate", actionResign: "🏳️ Rendirse", playComputer: "Jugar contra PC",
         turnOffGunshot: "Apagar disparos", turnOnGunshot: "Activar disparos",
@@ -41,7 +44,7 @@ const translations = {
         travelDeals: "✈️ OFERTAS DE VIAJE", menu: "MENÚ", coach: "Entrenador", watch: "Ver", share: "Compartir",
         news: "Noticias", community: "Comunidad", online: "En línea", members: "Miembros",
         gamesPlayed: "Partidas Jugadas", replayMode: "MODO REPETICIÓN",
-        time: "TIEMPO", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar", emailChallenge: "Retar por Email",
+        time: "TIEMPO", wager: "APUESTA", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar", emailChallenge: "Retar por Email",
         welcomeBack: "Bienvenido", createAccount: "Crear Cuenta", signupFree: "Regístrate gratis, juega gratis.",
         email: "Correo", password: "Contraseña", login: "Iniciar Sesión", signup: "Registrarse",
         needAccount: "¿Necesitas cuenta? Regístrate", haveAccount: "¿Tienes cuenta? Inicia sesión",
@@ -51,20 +54,23 @@ const translations = {
         opponentResigned: "El oponente se rindió. ¡Tú ganas!", youResigned: "Te rendiste. ¡Pierdes!",
         drawOfferSent: "Oferta de empate enviada...", drawAccepted: "¡Empate aceptado!", drawDeclined: "Oferta de empate rechazada.",
         opponentDisconnected: "El oponente se desconectó. ¡Tú ganas!",
-        startCall: "📹 Video", endCall: "🔴 Colgar"
+        startCall: "📹 Video", endCall: "🔴 Colgar",
+        forgotPassword: "¿Olvidaste tu contraseña?", resetPassword: "Restablecer Contraseña", sendResetLink: "Enviar Enlace",
+        resetEmailSent: "¡Enlace enviado! Revisa tu correo.", newPassword: "Nueva Contraseña", updatePassword: "Actualizar Contraseña",
+        passwordUpdated: "¡Contraseña actualizada con éxito!"
     },
     IT: {
-        loggedIn: "Connesso", logout: "Esci",
+        balance: "Saldo", addFunds: "Aggiungi Fondi", withdraw: "Ritira", insufficientFunds: "Fondi insufficienti.", loggedIn: "Connesso", logout: "Esci",
         communityChat: "CHAT COMUNITÀ", saySomething: "Dì qualcosa...", send: "Invia",
         actionDraw: "🤝 Patta", actionResign: "🏳️ Abbandona", playComputer: "Gioca contro PC",
         turnOffGunshot: "Spegni spari", turnOnGunshot: "Attiva spari",
         turnOffChatSpeak: "Spegni voce chat", turnOnChatSpeak: "Attiva voce chat",
-        score: "PUNTI", won: "VINTE", loss: "PERSE", statDraw: "PATTE", history: "CRONOLOGIA",
+        score: "PUNTOS", won: "VINTE", loss: "PERSE", statDraw: "PATTE", history: "CRONOLOGIA",
         gameChat: "CHAT DI GIOCO", chatLocked: "Chat bloccata", typeMessage: "Scrivi messaggio...",
         travelDeals: "✈️ OFFERTE VIAGGIO", menu: "MENU", coach: "Allenatore", watch: "Guarda", share: "Condividi",
         news: "Notizie", community: "Comunità", online: "Online", members: "Membri",
         gamesPlayed: "Partite Giocate", replayMode: "MODALITÀ REPLAY",
-        time: "TEMPO", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta", emailChallenge: "Sfida via Email",
+        time: "TEMPO", wager: "PUNTATA", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta", emailChallenge: "Sfida via Email",
         welcomeBack: "Bentornato", createAccount: "Crea Account", signupFree: "Iscriviti e gioca gratis.",
         email: "Email", password: "Password", login: "Accedi", signup: "Iscriviti",
         needAccount: "Serve un account? Iscriviti", haveAccount: "Hai un account? Accedi",
@@ -74,7 +80,10 @@ const translations = {
         opponentResigned: "L'avversario ha abbandonato. Hai Vinto!", youResigned: "Hai abbandonato. Hai Perso!",
         drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata.",
         opponentDisconnected: "Avversario disconnesso. Hai Vinto!",
-        startCall: "📹 Video", endCall: "🔴 Chiudi"
+        startCall: "📹 Video", endCall: "🔴 Chiudi",
+        forgotPassword: "Password dimenticata?", resetPassword: "Reimposta Password", sendResetLink: "Invia Link",
+        resetEmailSent: "Link inviato! Controlla l'email.", newPassword: "Nuova Password", updatePassword: "Aggiorna Password",
+        passwordUpdated: "Password aggiornata con successo!"
     }
 };
 
@@ -185,18 +194,71 @@ function getBestMove(gameInstance, depth = 2) {
     return bestMove || moves[0];
 }
 
+// ==========================================
+// 🛡️ PASSWORD UPDATE MODAL
+// ==========================================
+function PasswordUpdateModal({ onClose, language }) {
+    const t = translations[language] || translations.EN;
+    const [newPassword, setNewPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleUpdate = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        setLoading(false);
+
+        if (error) {
+            alert(error.message);
+        } else {
+            alert(t.passwordUpdated);
+            onClose();
+        }
+    };
+
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
+            <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '90%', maxWidth: '320px', border: '1px solid #333', position: 'relative' }}>
+                <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '20px', marginTop: 0 }}>{t.updatePassword}</h2>
+                <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <input type="password" required placeholder={t.newPassword} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#10b981', color: 'white', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>
+                        {loading ? '...' : t.updatePassword}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 function AuthModal({ onAuthSuccess, onClose, language }) {
     const t = translations[language];
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(true);
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         const cleanEmail = email.trim().toLowerCase();
-        let { data, error } = isLogin ? await supabase.auth.signInWithPassword({ email: cleanEmail, password }) : await supabase.auth.signUp({ email: cleanEmail, password });
+
+        if (isForgotPassword) {
+            const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+                redirectTo: `${window.location.origin}/`
+            });
+            setLoading(false);
+            if (error) alert(error.message);
+            else alert(t.resetEmailSent);
+            return;
+        }
+
+        let { data, error } = isLogin
+            ? await supabase.auth.signInWithPassword({ email: cleanEmail, password })
+            : await supabase.auth.signUp({ email: cleanEmail, password });
+
         setLoading(false);
         if (error) alert(error.message);
         else if (data?.user) onAuthSuccess(data.user);
@@ -206,17 +268,38 @@ function AuthModal({ onAuthSuccess, onClose, language }) {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
             <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '90%', maxWidth: '320px', border: '1px solid #333', position: 'relative' }}>
                 <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
-                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px', marginTop: 0 }}>{isLogin ? t.welcomeBack : t.createAccount}</h2>
-                <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', padding: '12px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '13px', marginBottom: '20px', lineHeight: '1.4', textAlign: 'center' }}>
-                    {t.signupFree}
-                </div>
+
+                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px', marginTop: 0 }}>
+                    {isForgotPassword ? t.resetPassword : (isLogin ? t.welcomeBack : t.createAccount)}
+                </h2>
+
+                {!isForgotPassword && (
+                    <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', padding: '12px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '13px', marginBottom: '20px', lineHeight: '1.4', textAlign: 'center' }}>
+                        {t.signupFree}
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                     <input type="email" required placeholder={t.email} value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
-                    <input type="password" required placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
-                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>{loading ? '...' : (isLogin ? t.login : t.signup)}</button>
+
+                    {!isForgotPassword && (
+                        <input type="password" required placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    )}
+
+                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>
+                        {loading ? '...' : (isForgotPassword ? t.sendResetLink : (isLogin ? t.login : t.signup))}
+                    </button>
                 </form>
-                <div style={{ textAlign: 'center', marginTop: '20px', color: '#aaa', fontSize: '14px' }}>
-                    <span onClick={() => setIsLogin(!isLogin)} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>{isLogin ? t.needAccount : t.haveAccount}</span>
+
+                <div style={{ textAlign: 'center', marginTop: '20px', color: '#aaa', fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {!isForgotPassword && (
+                        <span onClick={() => setIsForgotPassword(true)} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>
+                            {t.forgotPassword}
+                        </span>
+                    )}
+                    <span onClick={() => { setIsLogin(!isLogin); setIsForgotPassword(false); }} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>
+                        {isForgotPassword ? t.haveAccount : (isLogin ? t.needAccount : t.haveAccount)}
+                    </span>
                 </div>
             </div>
         </div>
@@ -270,11 +353,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const peerConnectionRef = useRef(null);
     const localStreamRef = useRef(null);
 
-    // Video refs
     const remoteVideoRef = useRef(null);
     const localVideoRef = useRef(null);
-
-    // ICE Candidate Queue
     const iceCandidateQueueRef = useRef([]);
 
     useEffect(() => {
@@ -289,7 +369,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, [localMediaStream, inVoiceCall]);
 
-    // Push-to-talk recording state
     const [isRecording, setIsRecording] = useState(false);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
@@ -303,13 +382,11 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [gamesHistoryList, setGamesHistoryList] = useState([]);
     const [isLoadingGames, setIsLoadingGames] = useState(false);
 
-    // 📰 News & Watch State
     const [showNews, setShowNews] = useState(false);
     const [chessNews, setChessNews] = useState([]);
     const [isLoadingNews, setIsLoadingNews] = useState(false);
     const [showWatch, setShowWatch] = useState(false);
 
-    // 🔥 Replay State 🔥
     const [replayInfo, setReplayInfo] = useState(null);
     const [isAutoPlaying, setIsAutoPlaying] = useState(false);
 
@@ -363,9 +440,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, [userEmail]);
 
-    // ==========================================
-    // 🔗 HANDLE INCOMING SHARED REPLAY LINKS
-    // ==========================================
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const replayGameId = params.get('replay');
@@ -414,9 +488,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, []);
 
-    // ==========================================
-    // ♟️ REALISTIC 3D CHESS PIECES
-    // ==========================================
     const pieceImages = {
         p: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bp.png', r: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/br.png', n: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bn.png',
         b: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bb.png', q: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bq.png', k: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bk.png',
@@ -427,7 +498,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const displayGame = new Chess();
     moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { console.error("History replay error", e); } });
 
-    // 🔥 Auto-play logic for replays 🔥
     useEffect(() => {
         let timer;
         if (replayInfo && isAutoPlaying && currentMoveIndex < moveHistory.length) {
@@ -654,9 +724,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         return () => window.removeEventListener('beforeunload', handleTabClose);
     }, [lobbyChannel]);
 
-    // ==========================================
-    // 📹 WEBRTC VIDEO CALL METHODS
-    // ==========================================
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     const startVoiceCall = async () => {
@@ -754,9 +821,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     if (speakChatEnabledRef.current && payload.text) speak(payload.text, language);
                 }
             })
-            // ==========================================
-            // 📡 WEBRTC SIGNALING HANDLERS
-            // ==========================================
             .on('broadcast', { event: 'webrtc-offer' }, async ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail) {
                     try {
@@ -926,9 +990,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setChatMessages(prev => [...prev, { text: chatInput, sender: userEmail }]); setChatInput('');
     };
 
-    // ==========================================
-    // 🎤 PUSH TO TALK AUDIO RECORDING METHODS
-    // ==========================================
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1168,7 +1229,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }
 
-    // 📩 Handle Game Share
     const handleShareGame = async (gameId) => {
         const targetEmail = window.prompt("Enter email address to send this game link to:");
         if (!targetEmail) return;
@@ -1191,7 +1251,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     };
 
-    // 🌐 Handle Social Media Share
     const handleSocialShare = (network, gameId) => {
         const gameLink = `https://chessonline.eu.com/?replay=${gameId}`;
         const encodedUrl = encodeURIComponent(gameLink);
@@ -1329,7 +1388,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                     setPlayerColor('w');
                                                     setShowGamesPlayed(false);
 
-                                                    // 🔥 START THE AUTO-REPLAY AND TTS 🔥
                                                     setIsAutoPlaying(true);
                                                     speak("Watch the game and see all the moves", language);
                                                 }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
@@ -1644,10 +1702,22 @@ export default function App() {
     const [currentUser, setCurrentUser] = useState(null);
     const [language, setLanguage] = useState('EN');
     const [showAuthModal, setShowAuthModal] = useState(false);
+    const [showPasswordUpdateModal, setShowPasswordUpdateModal] = useState(false);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => { if (session) setCurrentUser(session.user); });
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setCurrentUser(s?.user || null));
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) setCurrentUser(session.user);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            setCurrentUser(session?.user || null);
+
+            // Listen for password recovery events triggered when a user clicks the reset email link
+            if (event === 'PASSWORD_RECOVERY') {
+                setShowPasswordUpdateModal(true);
+            }
+        });
+
         return () => subscription.unsubscribe();
     }, []);
 
@@ -1660,6 +1730,7 @@ export default function App() {
                 language={language}
                 setLanguage={setLanguage}
             />
+
             {showAuthModal && !currentUser && (
                 <AuthModal
                     onAuthSuccess={(user) => {
@@ -1667,6 +1738,13 @@ export default function App() {
                         setShowAuthModal(false);
                     }}
                     onClose={() => setShowAuthModal(false)}
+                    language={language}
+                />
+            )}
+
+            {showPasswordUpdateModal && (
+                <PasswordUpdateModal
+                    onClose={() => setShowPasswordUpdateModal(false)}
                     language={language}
                 />
             )}
