@@ -56,7 +56,10 @@ const translations = {
         opponentResigned: "Opponent resigned. You Win!", youResigned: "You resigned. You Lose!",
         drawOfferSent: "Draw offer sent...", drawAccepted: "Draw Accepted!", drawDeclined: "Draw offer declined.",
         opponentDisconnected: "Opponent disconnected. You Win!",
-        startCall: "📹 Start Video", endCall: "🔴 Stop Video"
+        startCall: "📹 Start Video", endCall: "🔴 Stop Video",
+        forgotPassword: "Forgot Password?", resetPassword: "Reset Password", sendResetLink: "Send Reset Link",
+        resetEmailSent: "Reset link sent! Check your email.", newPassword: "New Password", updatePassword: "Update Password",
+        passwordUpdated: "Password updated successfully!"
     },
     ES: {
         balance: "Saldo", addFunds: "Añadir Fondos", withdraw: "Retirar", insufficientFunds: "Fondos insuficientes.", loggedIn: "Conectado", logout: "Salir",
@@ -79,7 +82,10 @@ const translations = {
         opponentResigned: "El oponente se rindió. ¡Tú ganas!", youResigned: "Te rendiste. ¡Pierdes!",
         drawOfferSent: "Oferta de empate enviada...", drawAccepted: "¡Empate aceptado!", drawDeclined: "Oferta de empate rechazada.",
         opponentDisconnected: "El oponente se desconectó. ¡Tú ganas!",
-        startCall: "📹 Video", endCall: "🔴 Colgar"
+        startCall: "📹 Video", endCall: "🔴 Colgar",
+        forgotPassword: "¿Olvidaste tu contraseña?", resetPassword: "Restablecer Contraseña", sendResetLink: "Enviar Enlace",
+        resetEmailSent: "¡Enlace enviado! Revisa tu correo.", newPassword: "Nueva Contraseña", updatePassword: "Actualizar Contraseña",
+        passwordUpdated: "¡Contraseña actualizada con éxito!"
     },
     IT: {
         balance: "Saldo", addFunds: "Aggiungi Fondi", withdraw: "Ritira", insufficientFunds: "Fondi insufficienti.", loggedIn: "Connesso", logout: "Esci",
@@ -102,7 +108,10 @@ const translations = {
         opponentResigned: "L'avversario ha abbandonato. Hai Vinto!", youResigned: "Hai abbandonato. Hai Perso!",
         drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata.",
         opponentDisconnected: "Avversario disconnesso. Hai Vinto!",
-        startCall: "📹 Video", endCall: "🔴 Chiudi"
+        startCall: "📹 Video", endCall: "🔴 Chiudi",
+        forgotPassword: "Password dimenticata?", resetPassword: "Reimposta Password", sendResetLink: "Invia Link",
+        resetEmailSent: "Link inviato! Controlla l'email.", newPassword: "Nuova Password", updatePassword: "Aggiorna Password",
+        passwordUpdated: "Password aggiornata con successo!"
     }
 };
 
@@ -266,18 +275,71 @@ function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
     );
 }
 
+// ==========================================
+// 🛡️ NEW COMPONENT: PASSWORD UPDATE MODAL
+// ==========================================
+function PasswordUpdateModal({ onClose, language }) {
+    const t = translations[language] || translations.EN;
+    const [newPassword, setNewPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleUpdate = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        const { error } = await supabase.auth.updateUser({ password: newPassword });
+        setLoading(false);
+
+        if (error) {
+            alert(error.message);
+        } else {
+            alert(t.passwordUpdated);
+            onClose();
+        }
+    };
+
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
+            <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '90%', maxWidth: '320px', border: '1px solid #333', position: 'relative' }}>
+                <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '20px', marginTop: 0 }}>{t.updatePassword}</h2>
+                <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <input type="password" required placeholder={t.newPassword} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#10b981', color: 'white', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>
+                        {loading ? '...' : t.updatePassword}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 function AuthModal({ onAuthSuccess, onClose, language }) {
     const t = translations[language];
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(true);
+    const [isForgotPassword, setIsForgotPassword] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         const cleanEmail = email.trim().toLowerCase();
-        let { data, error } = isLogin ? await supabase.auth.signInWithPassword({ email: cleanEmail, password }) : await supabase.auth.signUp({ email: cleanEmail, password });
+
+        if (isForgotPassword) {
+            const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+                redirectTo: `${window.location.origin}/`
+            });
+            setLoading(false);
+            if (error) alert(error.message);
+            else alert(t.resetEmailSent);
+            return;
+        }
+
+        let { data, error } = isLogin
+            ? await supabase.auth.signInWithPassword({ email: cleanEmail, password })
+            : await supabase.auth.signUp({ email: cleanEmail, password });
+
         setLoading(false);
         if (error) alert(error.message);
         else if (data?.user) onAuthSuccess(data.user);
@@ -287,17 +349,38 @@ function AuthModal({ onAuthSuccess, onClose, language }) {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
             <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '90%', maxWidth: '320px', border: '1px solid #333', position: 'relative' }}>
                 <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
-                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px', marginTop: 0 }}>{isLogin ? t.welcomeBack : t.createAccount}</h2>
-                <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', padding: '12px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '13px', marginBottom: '20px', lineHeight: '1.4', textAlign: 'center' }}>
-                    {t.signupFree}
-                </div>
+
+                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px', marginTop: 0 }}>
+                    {isForgotPassword ? t.resetPassword : (isLogin ? t.welcomeBack : t.createAccount)}
+                </h2>
+
+                {!isForgotPassword && (
+                    <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', padding: '12px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '13px', marginBottom: '20px', lineHeight: '1.4', textAlign: 'center' }}>
+                        {t.signupFree}
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                     <input type="email" required placeholder={t.email} value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
-                    <input type="password" required placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
-                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>{loading ? '...' : (isLogin ? t.login : t.signup)}</button>
+
+                    {!isForgotPassword && (
+                        <input type="password" required placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    )}
+
+                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>
+                        {loading ? '...' : (isForgotPassword ? t.sendResetLink : (isLogin ? t.login : t.signup))}
+                    </button>
                 </form>
-                <div style={{ textAlign: 'center', marginTop: '20px', color: '#aaa', fontSize: '14px' }}>
-                    <span onClick={() => setIsLogin(!isLogin)} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>{isLogin ? t.needAccount : t.haveAccount}</span>
+
+                <div style={{ textAlign: 'center', marginTop: '20px', color: '#aaa', fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {!isForgotPassword && (
+                        <span onClick={() => setIsForgotPassword(true)} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>
+                            {t.forgotPassword}
+                        </span>
+                    )}
+                    <span onClick={() => { setIsLogin(!isLogin); setIsForgotPassword(false); }} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>
+                        {isForgotPassword ? t.haveAccount : (isLogin ? t.needAccount : t.haveAccount)}
+                    </span>
                 </div>
             </div>
         </div>
@@ -1766,10 +1849,22 @@ export default function App() {
     const [currentUser, setCurrentUser] = useState(null);
     const [language, setLanguage] = useState('EN');
     const [showAuthModal, setShowAuthModal] = useState(false);
+    const [showPasswordUpdateModal, setShowPasswordUpdateModal] = useState(false);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => { if (session) setCurrentUser(session.user); });
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setCurrentUser(s?.user || null));
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session) setCurrentUser(session.user);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            setCurrentUser(session?.user || null);
+
+            // Listen for password recovery events triggered when a user clicks the reset email link
+            if (event === 'PASSWORD_RECOVERY') {
+                setShowPasswordUpdateModal(true);
+            }
+        });
+
         return () => subscription.unsubscribe();
     }, []);
 
@@ -1782,6 +1877,7 @@ export default function App() {
                 language={language}
                 setLanguage={setLanguage}
             />
+
             {showAuthModal && !currentUser && (
                 <AuthModal
                     onAuthSuccess={(user) => {
@@ -1789,6 +1885,13 @@ export default function App() {
                         setShowAuthModal(false);
                     }}
                     onClose={() => setShowAuthModal(false)}
+                    language={language}
+                />
+            )}
+
+            {showPasswordUpdateModal && (
+                <PasswordUpdateModal
+                    onClose={() => setShowPasswordUpdateModal(false)}
                     language={language}
                 />
             )}
