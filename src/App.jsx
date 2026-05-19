@@ -278,13 +278,41 @@ function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
     );
 }
 
+
 // ==========================================
 // 💸 STRIPE WITHDRAWAL COMPONENT
 // ==========================================
 function WithdrawModal({ amount, userId, onSuccess, onCancel }) {
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true); // Start loading while we check DB
     const [error, setError] = useState(null);
     const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+    // 1. Proactively check if the user has a Stripe account
+    useEffect(() => {
+        const checkStripeStatus = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('stripe_account_id')
+                    .eq('id', userId)
+                    .single();
+
+                if (error) throw error;
+
+                // If the field is null or empty, they need onboarding
+                if (!data || !data.stripe_account_id) {
+                    setNeedsOnboarding(true);
+                }
+            } catch (err) {
+                console.error("Error checking Stripe status:", err);
+                setError("Could not verify account status.");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        checkStripeStatus();
+    }, [userId]);
 
     const handleWithdraw = async (event) => {
         event.preventDefault();
@@ -296,12 +324,14 @@ function WithdrawModal({ amount, userId, onSuccess, onCancel }) {
             });
 
             if (backendError) {
-                // Check if the error specifically means they need to setup Stripe Connect
-                if (backendError.message.includes("connected Stripe account")) {
-                    setNeedsOnboarding(true);
-                    throw new Error("You must link a bank account to receive payouts.");
-                }
-                throw new Error(backendError.message || "Failed to process withdrawal.");
+                // We parse the context just in case the Edge Function sends a specific error body
+                let errorMessage = backendError.message;
+                try {
+                    const contextBody = await backendError.context.json();
+                    if (contextBody && contextBody.error) errorMessage = contextBody.error;
+                } catch (e) { /* Ignore parsing errors */ }
+
+                throw new Error(errorMessage || "Failed to process withdrawal.");
             }
 
             alert(`Successfully withdrew $${amount.toFixed(2)}!`);
@@ -324,6 +354,8 @@ function WithdrawModal({ amount, userId, onSuccess, onCancel }) {
             if (data?.url) {
                 // Redirect user to Stripe's secure onboarding flow
                 window.location.href = data.url;
+            } else {
+                throw new Error("No URL returned from Stripe.");
             }
         } catch (err) {
             setError("Failed to generate Stripe onboarding link. Check console.");
@@ -337,9 +369,13 @@ function WithdrawModal({ amount, userId, onSuccess, onCancel }) {
             <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '400px', border: '1px solid #333' }}>
                 <h3 style={{ color: '#f59e0b', marginTop: 0, textAlign: 'center' }}>Withdraw ${amount.toFixed(2)}</h3>
 
-                {!needsOnboarding ? (
+                {loading && <div style={{ color: '#aaa', fontSize: '13px', textAlign: 'center', marginBottom: '20px' }}>Checking account status...</div>}
+
+                {!loading && !needsOnboarding && (
                     <p style={{ color: '#aaa', fontSize: '13px', textAlign: 'center', marginBottom: '20px' }}>Funds will be securely transferred to your connected Stripe account.</p>
-                ) : (
+                )}
+
+                {!loading && needsOnboarding && (
                     <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', padding: '15px', borderRadius: '6px', border: '1px solid #f59e0b', marginBottom: '20px', textAlign: 'center' }}>
                         <p style={{ color: '#fbbf24', fontSize: '14px', margin: '0 0 10px 0', fontWeight: 'bold' }}>Action Required</p>
                         <p style={{ color: '#ddd', fontSize: '12px', margin: 0 }}>You must configure your payout details securely via Stripe before you can withdraw funds.</p>
@@ -354,11 +390,11 @@ function WithdrawModal({ amount, userId, onSuccess, onCancel }) {
 
                         {needsOnboarding ? (
                             <button type="button" onClick={handleSetupPayouts} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
-                                {loading ? 'Redirecting...' : 'Setup Payouts'}
+                                {loading ? '...' : 'Setup Payouts'}
                             </button>
                         ) : (
                             <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1, fontWeight: 'bold' }}>
-                                {loading ? 'Processing...' : 'Confirm Withdraw'}
+                                {loading ? '...' : 'Confirm Withdraw'}
                             </button>
                         )}
                     </div>
@@ -367,6 +403,7 @@ function WithdrawModal({ amount, userId, onSuccess, onCancel }) {
         </div>
     );
 }
+
 
 
 // ==========================================
