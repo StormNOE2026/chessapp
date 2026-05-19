@@ -222,6 +222,9 @@ function getBestMove(gameInstance, depth = 2) {
     return bestMove || moves[0];
 }
 
+// ==========================================
+// 💳 STRIPE DEPOSIT COMPONENT
+// ==========================================
 function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
     const stripe = useStripe();
     const elements = useElements();
@@ -274,6 +277,97 @@ function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
         </div>
     );
 }
+
+// ==========================================
+// 💸 STRIPE WITHDRAWAL COMPONENT
+// ==========================================
+function WithdrawModal({ amount, userId, onSuccess, onCancel }) {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState(null);
+    const [needsOnboarding, setNeedsOnboarding] = useState(false);
+
+    const handleWithdraw = async (event) => {
+        event.preventDefault();
+        setLoading(true);
+        setError(null);
+        try {
+            const { data, error: backendError } = await supabase.functions.invoke('process-withdrawal', {
+                body: { amount: amount, userId: userId }
+            });
+
+            if (backendError) {
+                // Check if the error specifically means they need to setup Stripe Connect
+                if (backendError.message.includes("connected Stripe account")) {
+                    setNeedsOnboarding(true);
+                    throw new Error("You must link a bank account to receive payouts.");
+                }
+                throw new Error(backendError.message || "Failed to process withdrawal.");
+            }
+
+            alert(`Successfully withdrew $${amount.toFixed(2)}!`);
+            onSuccess(amount);
+        } catch (err) {
+            setError(err.message);
+        }
+        setLoading(false);
+    };
+
+    const handleSetupPayouts = async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const { data, error } = await supabase.functions.invoke('setup-stripe-connect', {
+                body: { userId: userId, returnUrl: window.location.origin }
+            });
+
+            if (error) throw new Error(error.message);
+            if (data?.url) {
+                // Redirect user to Stripe's secure onboarding flow
+                window.location.href = data.url;
+            }
+        } catch (err) {
+            setError("Failed to generate Stripe onboarding link. Check console.");
+            console.error(err);
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
+            <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '400px', border: '1px solid #333' }}>
+                <h3 style={{ color: '#f59e0b', marginTop: 0, textAlign: 'center' }}>Withdraw ${amount.toFixed(2)}</h3>
+
+                {!needsOnboarding ? (
+                    <p style={{ color: '#aaa', fontSize: '13px', textAlign: 'center', marginBottom: '20px' }}>Funds will be securely transferred to your connected Stripe account.</p>
+                ) : (
+                    <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', padding: '15px', borderRadius: '6px', border: '1px solid #f59e0b', marginBottom: '20px', textAlign: 'center' }}>
+                        <p style={{ color: '#fbbf24', fontSize: '14px', margin: '0 0 10px 0', fontWeight: 'bold' }}>Action Required</p>
+                        <p style={{ color: '#ddd', fontSize: '12px', margin: 0 }}>You must configure your payout details securely via Stripe before you can withdraw funds.</p>
+                    </div>
+                )}
+
+                <form onSubmit={needsOnboarding ? (e) => e.preventDefault() : handleWithdraw}>
+                    {error && <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '15px', textAlign: 'center' }}>{error}</div>}
+
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                        <button type="button" onClick={onCancel} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
+
+                        {needsOnboarding ? (
+                            <button type="button" onClick={handleSetupPayouts} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
+                                {loading ? 'Redirecting...' : 'Setup Payouts'}
+                            </button>
+                        ) : (
+                            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1, fontWeight: 'bold' }}>
+                                {loading ? 'Processing...' : 'Confirm Withdraw'}
+                            </button>
+                        )}
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 
 // ==========================================
 // 🛡️ NEW COMPONENT: PASSWORD UPDATE MODAL
@@ -436,15 +530,11 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const peerConnectionRef = useRef(null);
     const localStreamRef = useRef(null);
 
-    // Video refs replacing the previous audio ref
     const remoteVideoRef = useRef(null);
     const localVideoRef = useRef(null);
 
-    // 🛡️ THE FIX: ICE Candidate Queue
-    // This prevents candidates from being dropped if they arrive before the peer connection is ready
     const iceCandidateQueueRef = useRef([]);
 
-    // Attach streams dynamically when available
     useEffect(() => {
         if (remoteVideoRef.current && remoteMediaStream) {
             remoteVideoRef.current.srcObject = remoteMediaStream;
@@ -457,7 +547,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, [localMediaStream, inVoiceCall]);
 
-    // Push-to-talk recording state
     const [isRecording, setIsRecording] = useState(false);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
@@ -497,8 +586,14 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const speakChatEnabledRef = useRef(speakChatEnabled);
     const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
+    // ==========================================
+    // 💳 BANKING MODALS STATE
+    // ==========================================
     const [showPaymentModal, setShowPaymentModal] = useState(false);
     const [depositAmount, setDepositAmount] = useState(10);
+    const [showWithdrawModal, setShowWithdrawModal] = useState(false);
+    const [withdrawAmount, setWithdrawAmount] = useState(10);
+
     const [travelAds, setTravelAds] = useState([]);
 
     const moveHistoryRef = useRef([]);
@@ -537,9 +632,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, [userEmail]);
 
-    // ==========================================
-    // 🔗 HANDLE INCOMING SHARED REPLAY LINKS
-    // ==========================================
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const replayGameId = params.get('replay');
@@ -588,9 +680,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, []);
 
-    // ==========================================
-    // ♟️ REALISTIC 3D CHESS PIECES
-    // ==========================================
     const pieceImages = {
         p: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bp.png', r: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/br.png', n: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bn.png',
         b: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bb.png', q: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bq.png', k: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bk.png',
@@ -601,7 +690,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const displayGame = new Chess();
     moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { console.error("History replay error", e); } });
 
-    // 🔥 Auto-play logic for replays 🔥
     useEffect(() => {
         let timer;
         if (replayInfo && isAutoPlaying && currentMoveIndex < moveHistory.length) {
@@ -746,6 +834,25 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     };
 
+    const handleWithdrawClick = () => {
+        const amountStr = prompt(`Enter amount to withdraw ($). Available: $${parseFloat(stats.balance || 0).toFixed(2)}`, "10.00");
+        if (!amountStr) return;
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount < 1) { alert("Please enter a valid amount of $1.00 or more."); return; }
+        if (amount > parseFloat(stats.balance || 0)) { alert(t.insufficientFunds); return; }
+        setWithdrawAmount(amount);
+        setShowWithdrawModal(true);
+    };
+
+    const handleWithdrawSuccess = async (amount) => {
+        setShowWithdrawModal(false);
+        const newBalance = parseFloat(stats.balance || 0) - parseFloat(amount);
+        setStats(prev => ({ ...prev, balance: newBalance }));
+        if (user) {
+            await supabase.from('profiles').update({ balance: newBalance }).eq('id', user.id);
+        }
+    };
+
     const fetchAllMembers = async () => {
         let { data } = await supabase.from('profiles').select('email');
         if (data) {
@@ -845,15 +952,11 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         return () => window.removeEventListener('beforeunload', handleTabClose);
     }, [lobbyChannel]);
 
-    // ==========================================
-    // 📹 WEBRTC VIDEO CALL METHODS
-    // ==========================================
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     const startVoiceCall = async () => {
         if (!opponent) return;
         try {
-            // Request both video and audio
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             localStreamRef.current = stream;
             setLocalMediaStream(stream);
@@ -895,7 +998,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             localStreamRef.current.getTracks().forEach(track => track.stop());
             localStreamRef.current = null;
         }
-        iceCandidateQueueRef.current = []; // Clear the ICE queue
+        iceCandidateQueueRef.current = [];
         setRemoteMediaStream(null);
         setLocalMediaStream(null);
         setInVoiceCall(false);
@@ -946,9 +1049,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     if (speakChatEnabledRef.current && payload.text) speak(payload.text, language);
                 }
             })
-            // ==========================================
-            // 📡 WEBRTC SIGNALING HANDLERS
-            // ==========================================
             .on('broadcast', { event: 'webrtc-offer' }, async ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail) {
                     try {
@@ -975,7 +1075,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
                         await pc.setRemoteDescription(new RTCSessionDescription(payload.offer));
 
-                        // 🛡️ Flush queued ICE candidates that arrived before setRemoteDescription finished
                         while (iceCandidateQueueRef.current.length > 0) {
                             const candidate = iceCandidateQueueRef.current.shift();
                             await pc.addIceCandidate(new RTCIceCandidate(candidate));
@@ -996,7 +1095,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     try {
                         await peerConnectionRef.current.setRemoteDescription(new RTCSessionDescription(payload.answer));
 
-                        // 🛡️ Flush queued ICE candidates for the caller
                         while (iceCandidateQueueRef.current.length > 0) {
                             const candidate = iceCandidateQueueRef.current.shift();
                             await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(candidate));
@@ -1010,7 +1108,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
                             await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
                         } else {
-                            // 🛡️ Safely queue candidates if the connection isn't ready yet
                             iceCandidateQueueRef.current.push(payload.candidate);
                         }
                     } catch (e) { console.error("Error adding ice candidate", e); }
@@ -1018,7 +1115,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             })
             .on('broadcast', { event: 'webrtc-end' }, ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail) {
-                    endVoiceCall(false); // don't broadcast back
+                    endVoiceCall(false);
                 }
             })
             .on('broadcast', { event: 'resign' }, ({ payload }) => {
@@ -1121,9 +1218,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setChatMessages(prev => [...prev, { text: chatInput, sender: userEmail }]); setChatInput('');
     };
 
-    // ==========================================
-    // 🎤 PUSH TO TALK AUDIO RECORDING METHODS
-    // ==========================================
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1365,7 +1459,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }
 
-    // 📩 Handle Game Share
     const handleShareGame = async (gameId) => {
         const targetEmail = window.prompt("Enter email address to send this game link to:");
         if (!targetEmail) return;
@@ -1388,7 +1481,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     };
 
-    // 🌐 Handle Social Media Share
     const handleSocialShare = (network, gameId) => {
         const gameLink = `https://chessonline.eu.com/?replay=${gameId}`;
         const encodedUrl = encodeURIComponent(gameLink);
@@ -1410,6 +1502,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
             <style>{`@keyframes shatterPiece { 0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; } 70% { opacity: 0.8; } 100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; } }`}</style>
 
             {showPaymentModal && user && <Elements stripe={stripePromise}><CheckoutForm amount={depositAmount} userId={user.id} onSuccess={handlePaymentSuccess} onCancel={() => setShowPaymentModal(false)} /></Elements>}
+
+            {showWithdrawModal && user && <WithdrawModal amount={withdrawAmount} userId={user.id} onSuccess={handleWithdrawSuccess} onCancel={() => setShowWithdrawModal(false)} />}
 
             {/* WATCH LIVE GAMES MODAL */}
             {showWatch && (
@@ -1528,7 +1622,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                     setPlayerColor('w');
                                                     setShowGamesPlayed(false);
 
-                                                    // 🔥 START THE AUTO-REPLAY AND TTS 🔥
                                                     setIsAutoPlaying(true);
                                                     speak("Watch the game and see all the moves", language);
                                                 }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
@@ -1584,7 +1677,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         {user ? (
                             <>
                                 <span style={{ fontSize: '14px', color: '#10b981', fontWeight: 'bold' }}>{t.balance}: ${parseFloat(stats.balance || 0).toFixed(2)}</span>
-                                <button onClick={handleAddFundsClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{t.addFunds}</button>
+                                <button onClick={handleAddFundsClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{t.addFunds}</button>
+                                <button onClick={handleWithdrawClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{t.withdraw}</button>
                                 <span style={{ fontSize: '14px', whiteSpace: 'nowrap', display: isMobile ? 'none' : 'inline' }}>{t.loggedIn}: <b style={{ color: '#38bdf8' }}>{userEmail.split('@')[0]}</b></span>
                                 <button onClick={handleLogoutClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>{t.logout}</button>
                             </>
