@@ -1,42 +1,14 @@
 ﻿import React, { useState, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { supabase } from './supabaseClient';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
 import './App.css';
-
-// ==========================================
-// 🛡️ BULLETPROOF STRIPE INITIALIZATION
-// ==========================================
-let STRIPE_KEY = 'pk_test_YOUR_STRIPE_PUBLIC_KEY'; // Fallback
-
-try {
-    if (typeof process !== 'undefined' && process.env.REACT_APP_STRIPE_PUBLIC_KEY) {
-        STRIPE_KEY = process.env.REACT_APP_STRIPE_PUBLIC_KEY;
-    } else if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_STRIPE_PUBLIC_KEY) {
-        STRIPE_KEY = import.meta.env.VITE_STRIPE_PUBLIC_KEY;
-    }
-} catch (e) {
-    console.warn("Could not read environment variables, using fallback Stripe key.");
-}
-
-let stripePromise = null;
-if (STRIPE_KEY && STRIPE_KEY.startsWith('pk_')) {
-    try {
-        stripePromise = loadStripe(STRIPE_KEY);
-    } catch (error) {
-        console.error("Stripe initialization failed:", error);
-    }
-} else {
-    console.error("🛑 STRIPE ERROR: Invalid Public Key. It must start with 'pk_test_' or 'pk_live_'. Check your .env file!");
-}
 
 // ==========================================
 // 🌍 TRANSLATIONS DICTIONARY
 // ==========================================
 const translations = {
     EN: {
-        balance: "Balance", addFunds: "Add Funds", withdraw: "Withdraw", insufficientFunds: "Insufficient funds.", loggedIn: "Logged in", logout: "Logout",
+        loggedIn: "Logged in", logout: "Logout",
         communityChat: "COMMUNITY CHAT", saySomething: "Say something...", send: "Send",
         actionDraw: "🤝 Draw", actionResign: "🏳️ Resign", playComputer: "Play Computer",
         turnOffGunshot: "Turn off gunshot", turnOnGunshot: "Turn on gunshot",
@@ -46,7 +18,7 @@ const translations = {
         travelDeals: "✈️ TRAVEL DEALS", menu: "MENU", coach: "Coach", watch: "Watch", share: "Share",
         news: "News", community: "Community", online: "Online", members: "Members",
         gamesPlayed: "Games Played", replayMode: "REPLAY MODE",
-        time: "TIME", wager: "WAGER", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline", emailChallenge: "Email Challenge",
+        time: "TIME", challengeBtn: "Challenge", acceptBtn: "Accept", declineBtn: "Decline", emailChallenge: "Email Challenge",
         welcomeBack: "Welcome Back", createAccount: "Create Account", signupFree: "Signup for free and play chess for free.",
         email: "Email", password: "Password", login: "Log In", signup: "Sign Up",
         needAccount: "Need an account? Sign up", haveAccount: "Have an account? Log in",
@@ -56,13 +28,10 @@ const translations = {
         opponentResigned: "Opponent resigned. You Win!", youResigned: "You resigned. You Lose!",
         drawOfferSent: "Draw offer sent...", drawAccepted: "Draw Accepted!", drawDeclined: "Draw offer declined.",
         opponentDisconnected: "Opponent disconnected. You Win!",
-        startCall: "📹 Start Video", endCall: "🔴 Stop Video",
-        forgotPassword: "Forgot Password?", resetPassword: "Reset Password", sendResetLink: "Send Reset Link",
-        resetEmailSent: "Reset link sent! Check your email.", newPassword: "New Password", updatePassword: "Update Password",
-        passwordUpdated: "Password updated successfully!"
+        startCall: "📹 Start Video", endCall: "🔴 Stop Video"
     },
     ES: {
-        balance: "Saldo", addFunds: "Añadir Fondos", withdraw: "Retirar", insufficientFunds: "Fondos insuficientes.", loggedIn: "Conectado", logout: "Salir",
+        loggedIn: "Conectado", logout: "Salir",
         communityChat: "CHAT COMUNIDAD", saySomething: "Di algo...", send: "Enviar",
         actionDraw: "🤝 Empate", actionResign: "🏳️ Rendirse", playComputer: "Jugar contra PC",
         turnOffGunshot: "Apagar disparos", turnOnGunshot: "Activar disparos",
@@ -72,7 +41,7 @@ const translations = {
         travelDeals: "✈️ OFERTAS DE VIAJE", menu: "MENÚ", coach: "Entrenador", watch: "Ver", share: "Compartir",
         news: "Noticias", community: "Comunidad", online: "En línea", members: "Miembros",
         gamesPlayed: "Partidas Jugadas", replayMode: "MODO REPETICIÓN",
-        time: "TIEMPO", wager: "APUESTA", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar", emailChallenge: "Retar por Email",
+        time: "TIEMPO", challengeBtn: "Desafiar", acceptBtn: "Aceptar", declineBtn: "Rechazar", emailChallenge: "Retar por Email",
         welcomeBack: "Bienvenido", createAccount: "Crear Cuenta", signupFree: "Regístrate gratis, juega gratis.",
         email: "Correo", password: "Contraseña", login: "Iniciar Sesión", signup: "Registrarse",
         needAccount: "¿Necesitas cuenta? Regístrate", haveAccount: "¿Tienes cuenta? Inicia sesión",
@@ -82,13 +51,10 @@ const translations = {
         opponentResigned: "El oponente se rindió. ¡Tú ganas!", youResigned: "Te rendiste. ¡Pierdes!",
         drawOfferSent: "Oferta de empate enviada...", drawAccepted: "¡Empate aceptado!", drawDeclined: "Oferta de empate rechazada.",
         opponentDisconnected: "El oponente se desconectó. ¡Tú ganas!",
-        startCall: "📹 Video", endCall: "🔴 Colgar",
-        forgotPassword: "¿Olvidaste tu contraseña?", resetPassword: "Restablecer Contraseña", sendResetLink: "Enviar Enlace",
-        resetEmailSent: "¡Enlace enviado! Revisa tu correo.", newPassword: "Nueva Contraseña", updatePassword: "Actualizar Contraseña",
-        passwordUpdated: "¡Contraseña actualizada con éxito!"
+        startCall: "📹 Video", endCall: "🔴 Colgar"
     },
     IT: {
-        balance: "Saldo", addFunds: "Aggiungi Fondi", withdraw: "Ritira", insufficientFunds: "Fondi insufficienti.", loggedIn: "Connesso", logout: "Esci",
+        loggedIn: "Connesso", logout: "Esci",
         communityChat: "CHAT COMUNITÀ", saySomething: "Dì qualcosa...", send: "Invia",
         actionDraw: "🤝 Patta", actionResign: "🏳️ Abbandona", playComputer: "Gioca contro PC",
         turnOffGunshot: "Spegni spari", turnOnGunshot: "Attiva spari",
@@ -98,7 +64,7 @@ const translations = {
         travelDeals: "✈️ OFFERTE VIAGGIO", menu: "MENU", coach: "Allenatore", watch: "Guarda", share: "Condividi",
         news: "Notizie", community: "Comunità", online: "Online", members: "Membri",
         gamesPlayed: "Partite Giocate", replayMode: "MODALITÀ REPLAY",
-        time: "TEMPO", wager: "PUNTATA", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta", emailChallenge: "Sfida via Email",
+        time: "TEMPO", challengeBtn: "Sfida", acceptBtn: "Accetta", declineBtn: "Rifiuta", emailChallenge: "Sfida via Email",
         welcomeBack: "Bentornato", createAccount: "Crea Account", signupFree: "Iscriviti e gioca gratis.",
         email: "Email", password: "Password", login: "Accedi", signup: "Iscriviti",
         needAccount: "Serve un account? Iscriviti", haveAccount: "Hai un account? Accedi",
@@ -108,10 +74,7 @@ const translations = {
         opponentResigned: "L'avversario ha abbandonato. Hai Vinto!", youResigned: "Hai abbandonato. Hai Perso!",
         drawOfferSent: "Offerta di patta inviata...", drawAccepted: "Patta accettata!", drawDeclined: "Offerta di patta rifiutata.",
         opponentDisconnected: "Avversario disconnesso. Hai Vinto!",
-        startCall: "📹 Video", endCall: "🔴 Chiudi",
-        forgotPassword: "Password dimenticata?", resetPassword: "Reimposta Password", sendResetLink: "Invia Link",
-        resetEmailSent: "Link inviato! Controlla l'email.", newPassword: "Nuova Password", updatePassword: "Aggiorna Password",
-        passwordUpdated: "Password aggiornata con successo!"
+        startCall: "📹 Video", endCall: "🔴 Chiudi"
     }
 };
 
@@ -222,255 +185,18 @@ function getBestMove(gameInstance, depth = 2) {
     return bestMove || moves[0];
 }
 
-// ==========================================
-// 💳 STRIPE DEPOSIT COMPONENT
-// ==========================================
-function CheckoutForm({ amount, userId, onSuccess, onCancel }) {
-    const stripe = useStripe();
-    const elements = useElements();
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState(null);
-
-    const handleSubmit = async (event) => {
-        event.preventDefault();
-        if (!stripe || !elements) {
-            setError("Payment gateway is still loading or failed to connect. Please check your Stripe API Key.");
-            return;
-        }
-        setLoading(true);
-        setError(null);
-        try {
-            const { data, error: backendError } = await supabase.functions.invoke('create-payment', { body: { amount: amount, userId: userId } });
-            if (backendError) throw new Error(backendError.message || "Failed to initialize payment.");
-            if (!data?.clientSecret) throw new Error("No secure client secret returned from the server.");
-            const result = await stripe.confirmCardPayment(data.clientSecret, { payment_method: { card: elements.getElement(CardElement) } });
-            if (result.error) {
-                setError(result.error.message);
-            } else if (result.paymentIntent.status === 'succeeded') {
-                alert(`Successfully added $${amount.toFixed(2)}!`);
-                onSuccess(amount);
-            }
-        } catch (err) {
-            setError(err.message || "An error occurred during payment. Check console for details.");
-        }
-        setLoading(false);
-    };
-
-    return (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
-            <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '400px', border: '1px solid #333' }}>
-                <h3 style={{ color: '#38bdf8', marginTop: 0, textAlign: 'center' }}>Deposit ${amount.toFixed(2)}</h3>
-                {!stripe && <div style={{ color: '#fbbf24', fontSize: '13px', marginBottom: '15px', textAlign: 'center', backgroundColor: '#333', padding: '10px', borderRadius: '4px' }}>Connecting to secure payment gateway...</div>}
-                <form onSubmit={handleSubmit}>
-                    <div style={{ padding: '15px', backgroundColor: '#2c2c2c', borderRadius: '4px', marginBottom: '20px' }}>
-                        <CardElement options={{ style: { base: { fontSize: '16px', color: '#ffffff', '::placeholder': { color: '#aab7c4' } } } }} />
-                    </div>
-                    {error && <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '15px', textAlign: 'center' }}>{error}</div>}
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <button type="button" onClick={onCancel} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
-                        <button type="submit" disabled={!stripe || loading} style={{ flex: 1, padding: '12px', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', cursor: (!stripe || loading) ? 'not-allowed' : 'pointer', opacity: (!stripe || loading) ? 0.5 : 1, fontWeight: 'bold' }}>
-                            {loading ? 'Processing...' : `Pay $${amount.toFixed(2)}`}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-}
-
-
-// ==========================================
-// 💸 STRIPE WITHDRAWAL COMPONENT
-// ==========================================
-function WithdrawModal({ amount, userId, onSuccess, onCancel }) {
-    const [loading, setLoading] = useState(true); // Start loading while we check DB
-    const [error, setError] = useState(null);
-    const [needsOnboarding, setNeedsOnboarding] = useState(false);
-
-    // 1. Proactively check if the user has a Stripe account
-    useEffect(() => {
-        const checkStripeStatus = async () => {
-            try {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('stripe_account_id')
-                    .eq('id', userId)
-                    .single();
-
-                if (error) throw error;
-
-                // If the field is null or empty, they need onboarding
-                if (!data || !data.stripe_account_id) {
-                    setNeedsOnboarding(true);
-                }
-            } catch (err) {
-                console.error("Error checking Stripe status:", err);
-                setError("Could not verify account status.");
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        checkStripeStatus();
-    }, [userId]);
-
-    const handleWithdraw = async (event) => {
-        event.preventDefault();
-        setLoading(true);
-        setError(null);
-        try {
-            const { data, error: backendError } = await supabase.functions.invoke('process-withdrawal', {
-                body: { amount: amount, userId: userId }
-            });
-
-            if (backendError) {
-                // We parse the context just in case the Edge Function sends a specific error body
-                let errorMessage = backendError.message;
-                try {
-                    const contextBody = await backendError.context.json();
-                    if (contextBody && contextBody.error) errorMessage = contextBody.error;
-                } catch (e) { /* Ignore parsing errors */ }
-
-                throw new Error(errorMessage || "Failed to process withdrawal.");
-            }
-
-            alert(`Successfully withdrew $${amount.toFixed(2)}!`);
-            onSuccess(amount);
-        } catch (err) {
-            setError(err.message);
-        }
-        setLoading(false);
-    };
-
-    const handleSetupPayouts = async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const { data, error } = await supabase.functions.invoke('setup-stripe-connect', {
-                body: { userId: userId, returnUrl: window.location.origin }
-            });
-
-            if (error) throw new Error(error.message);
-            if (data?.url) {
-                // Redirect user to Stripe's secure onboarding flow
-                window.location.href = data.url;
-            } else {
-                throw new Error("No URL returned from Stripe.");
-            }
-        } catch (err) {
-            setError("Failed to generate Stripe onboarding link. Check console.");
-            console.error(err);
-            setLoading(false);
-        }
-    };
-
-    return (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 9999 }}>
-            <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '400px', border: '1px solid #333' }}>
-                <h3 style={{ color: '#f59e0b', marginTop: 0, textAlign: 'center' }}>Withdraw ${amount.toFixed(2)}</h3>
-
-                {loading && <div style={{ color: '#aaa', fontSize: '13px', textAlign: 'center', marginBottom: '20px' }}>Checking account status...</div>}
-
-                {!loading && !needsOnboarding && (
-                    <p style={{ color: '#aaa', fontSize: '13px', textAlign: 'center', marginBottom: '20px' }}>Funds will be securely transferred to your connected Stripe account.</p>
-                )}
-
-                {!loading && needsOnboarding && (
-                    <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', padding: '15px', borderRadius: '6px', border: '1px solid #f59e0b', marginBottom: '20px', textAlign: 'center' }}>
-                        <p style={{ color: '#fbbf24', fontSize: '14px', margin: '0 0 10px 0', fontWeight: 'bold' }}>Action Required</p>
-                        <p style={{ color: '#ddd', fontSize: '12px', margin: 0 }}>You must configure your payout details securely via Stripe before you can withdraw funds.</p>
-                    </div>
-                )}
-
-                <form onSubmit={needsOnboarding ? (e) => e.preventDefault() : handleWithdraw}>
-                    {error && <div style={{ color: '#ef4444', fontSize: '13px', marginBottom: '15px', textAlign: 'center' }}>{error}</div>}
-
-                    <div style={{ display: 'flex', gap: '10px' }}>
-                        <button type="button" onClick={onCancel} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#333', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}>Cancel</button>
-
-                        {needsOnboarding ? (
-                            <button type="button" onClick={handleSetupPayouts} disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#6366f1', color: 'white', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', fontWeight: 'bold' }}>
-                                {loading ? '...' : 'Setup Payouts'}
-                            </button>
-                        ) : (
-                            <button type="submit" disabled={loading} style={{ flex: 1, padding: '12px', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.5 : 1, fontWeight: 'bold' }}>
-                                {loading ? '...' : 'Confirm Withdraw'}
-                            </button>
-                        )}
-                    </div>
-                </form>
-            </div>
-        </div>
-    );
-}
-
-
-
-// ==========================================
-// 🛡️ NEW COMPONENT: PASSWORD UPDATE MODAL
-// ==========================================
-function PasswordUpdateModal({ onClose, language }) {
-    const t = translations[language] || translations.EN;
-    const [newPassword, setNewPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const handleUpdate = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        const { error } = await supabase.auth.updateUser({ password: newPassword });
-        setLoading(false);
-
-        if (error) {
-            alert(error.message);
-        } else {
-            alert(t.passwordUpdated);
-            onClose();
-        }
-    };
-
-    return (
-        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
-            <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '90%', maxWidth: '320px', border: '1px solid #333', position: 'relative' }}>
-                <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
-                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '20px', marginTop: 0 }}>{t.updatePassword}</h2>
-                <form onSubmit={handleUpdate} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
-                    <input type="password" required placeholder={t.newPassword} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
-                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#10b981', color: 'white', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>
-                        {loading ? '...' : t.updatePassword}
-                    </button>
-                </form>
-            </div>
-        </div>
-    );
-}
-
 function AuthModal({ onAuthSuccess, onClose, language }) {
     const t = translations[language];
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [isLogin, setIsLogin] = useState(true);
-    const [isForgotPassword, setIsForgotPassword] = useState(false);
     const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         const cleanEmail = email.trim().toLowerCase();
-
-        if (isForgotPassword) {
-            const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-                redirectTo: `${window.location.origin}/`
-            });
-            setLoading(false);
-            if (error) alert(error.message);
-            else alert(t.resetEmailSent);
-            return;
-        }
-
-        let { data, error } = isLogin
-            ? await supabase.auth.signInWithPassword({ email: cleanEmail, password })
-            : await supabase.auth.signUp({ email: cleanEmail, password });
-
+        let { data, error } = isLogin ? await supabase.auth.signInWithPassword({ email: cleanEmail, password }) : await supabase.auth.signUp({ email: cleanEmail, password });
         setLoading(false);
         if (error) alert(error.message);
         else if (data?.user) onAuthSuccess(data.user);
@@ -480,38 +206,17 @@ function AuthModal({ onAuthSuccess, onClose, language }) {
         <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
             <div style={{ backgroundColor: '#1e1e1e', padding: '40px', borderRadius: '8px', width: '90%', maxWidth: '320px', border: '1px solid #333', position: 'relative' }}>
                 <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
-
-                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px', marginTop: 0 }}>
-                    {isForgotPassword ? t.resetPassword : (isLogin ? t.welcomeBack : t.createAccount)}
-                </h2>
-
-                {!isForgotPassword && (
-                    <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', padding: '12px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '13px', marginBottom: '20px', lineHeight: '1.4', textAlign: 'center' }}>
-                        {t.signupFree}
-                    </div>
-                )}
-
+                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '15px', marginTop: 0 }}>{isLogin ? t.welcomeBack : t.createAccount}</h2>
+                <div style={{ backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#fbbf24', padding: '12px', borderRadius: '6px', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '13px', marginBottom: '20px', lineHeight: '1.4', textAlign: 'center' }}>
+                    {t.signupFree}
+                </div>
                 <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
                     <input type="email" required placeholder={t.email} value={email} onChange={(e) => setEmail(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
-
-                    {!isForgotPassword && (
-                        <input type="password" required placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
-                    )}
-
-                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>
-                        {loading ? '...' : (isForgotPassword ? t.sendResetLink : (isLogin ? t.login : t.signup))}
-                    </button>
+                    <input type="password" required placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>{loading ? '...' : (isLogin ? t.login : t.signup)}</button>
                 </form>
-
-                <div style={{ textAlign: 'center', marginTop: '20px', color: '#aaa', fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {!isForgotPassword && (
-                        <span onClick={() => setIsForgotPassword(true)} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>
-                            {t.forgotPassword}
-                        </span>
-                    )}
-                    <span onClick={() => { setIsLogin(!isLogin); setIsForgotPassword(false); }} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>
-                        {isForgotPassword ? t.haveAccount : (isLogin ? t.needAccount : t.haveAccount)}
-                    </span>
+                <div style={{ textAlign: 'center', marginTop: '20px', color: '#aaa', fontSize: '14px' }}>
+                    <span onClick={() => setIsLogin(!isLogin)} style={{ color: '#38bdf8', cursor: 'pointer', textDecoration: 'underline' }}>{isLogin ? t.needAccount : t.haveAccount}</span>
                 </div>
             </div>
         </div>
@@ -538,8 +243,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const [isPlayingComputer, setIsPlayingComputer] = useState(false);
     const [challengeTime, setChallengeTime] = useState(600);
-    const [wagerAmount, setWagerAmount] = useState(0);
-    const [currentStake, setCurrentStake] = useState(0);
 
     const [explosion, setExplosion] = useState(null);
     const [onlineUsers, setOnlineUsers] = useState([]);
@@ -567,9 +270,11 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const peerConnectionRef = useRef(null);
     const localStreamRef = useRef(null);
 
+    // Video refs
     const remoteVideoRef = useRef(null);
     const localVideoRef = useRef(null);
 
+    // ICE Candidate Queue
     const iceCandidateQueueRef = useRef([]);
 
     useEffect(() => {
@@ -584,6 +289,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, [localMediaStream, inVoiceCall]);
 
+    // Push-to-talk recording state
     const [isRecording, setIsRecording] = useState(false);
     const mediaRecorderRef = useRef(null);
     const audioChunksRef = useRef([]);
@@ -614,7 +320,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const timerRef = useRef(null);
     const mySocketId = useRef(Math.random().toString(36).substring(7));
-    const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100, balance: 0 });
+    const [stats, setStats] = useState({ wins: 0, losses: 0, draws: 0, score: 100 });
 
     const [isGameOverManually, setIsGameOverManually] = useState(false);
     const [gunshotEnabled, setGunshotEnabled] = useState(true);
@@ -623,14 +329,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const speakChatEnabledRef = useRef(speakChatEnabled);
     const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
-    // ==========================================
-    // 💳 BANKING MODALS STATE
-    // ==========================================
-    const [showPaymentModal, setShowPaymentModal] = useState(false);
-    const [depositAmount, setDepositAmount] = useState(10);
-    const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-    const [withdrawAmount, setWithdrawAmount] = useState(10);
-
     const [travelAds, setTravelAds] = useState([]);
 
     const moveHistoryRef = useRef([]);
@@ -638,9 +336,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const playerColorRef = useRef('w');
     useEffect(() => { playerColorRef.current = playerColor; }, [playerColor]);
-
-    const currentStakeRef = useRef(0);
-    useEffect(() => { currentStakeRef.current = currentStake; }, [currentStake]);
 
     const isGameOverManuallyRef = useRef(false);
     useEffect(() => { isGameOverManuallyRef.current = isGameOverManually; }, [isGameOverManually]);
@@ -662,13 +357,15 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (urlChallenger && urlTime) {
             setIncomingChallenge({
                 email: urlChallenger,
-                timeControl: parseInt(urlTime, 10),
-                wagerAmount: 0
+                timeControl: parseInt(urlTime, 10)
             });
             window.history.replaceState({}, document.title, window.location.pathname);
         }
     }, [userEmail]);
 
+    // ==========================================
+    // 🔗 HANDLE INCOMING SHARED REPLAY LINKS
+    // ==========================================
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const replayGameId = params.get('replay');
@@ -717,6 +414,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }, []);
 
+    // ==========================================
+    // ♟️ REALISTIC 3D CHESS PIECES
+    // ==========================================
     const pieceImages = {
         p: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bp.png', r: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/br.png', n: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bn.png',
         b: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bb.png', q: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bq.png', k: 'https://images.chesscomfiles.com/chess-themes/pieces/wood/150/bk.png',
@@ -727,6 +427,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const displayGame = new Chess();
     moveHistory.slice(0, currentMoveIndex).forEach(m => { try { displayGame.move(m); } catch (e) { console.error("History replay error", e); } });
 
+    // 🔥 Auto-play logic for replays 🔥
     useEffect(() => {
         let timer;
         if (replayInfo && isAutoPlaying && currentMoveIndex < moveHistory.length) {
@@ -796,7 +497,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         if (!user) return;
         let { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
         if (data) {
-            setStats({ wins: data.wins || 0, losses: data.losses || 0, draws: data.draws || 0, score: data.score !== undefined ? data.score : 100, balance: parseFloat(data.balance || 0) });
+            setStats({ wins: data.wins || 0, losses: data.losses || 0, draws: data.draws || 0, score: data.score !== undefined ? data.score : 100 });
         }
     };
 
@@ -852,41 +553,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     result: resultText
                 }]);
             } catch (err) { }
-        }
-    };
-
-    const handleAddFundsClick = () => {
-        const amountStr = prompt("Enter amount to deposit ($):", "10.00");
-        if (!amountStr) return; const amount = parseFloat(amountStr);
-        if (isNaN(amount) || amount < 1) { alert("Please enter a valid amount of $1.00 or more."); return; }
-        setDepositAmount(amount); setShowPaymentModal(true);
-    };
-
-    const handlePaymentSuccess = async (amount) => {
-        setShowPaymentModal(false);
-        const newBalance = parseFloat(stats.balance || 0) + parseFloat(amount);
-        setStats(prev => ({ ...prev, balance: newBalance }));
-        if (user) {
-            await supabase.from('profiles').update({ balance: newBalance }).eq('id', user.id);
-        }
-    };
-
-    const handleWithdrawClick = () => {
-        const amountStr = prompt(`Enter amount to withdraw ($). Available: $${parseFloat(stats.balance || 0).toFixed(2)}`, "10.00");
-        if (!amountStr) return;
-        const amount = parseFloat(amountStr);
-        if (isNaN(amount) || amount < 1) { alert("Please enter a valid amount of $1.00 or more."); return; }
-        if (amount > parseFloat(stats.balance || 0)) { alert(t.insufficientFunds); return; }
-        setWithdrawAmount(amount);
-        setShowWithdrawModal(true);
-    };
-
-    const handleWithdrawSuccess = async (amount) => {
-        setShowWithdrawModal(false);
-        const newBalance = parseFloat(stats.balance || 0) - parseFloat(amount);
-        setStats(prev => ({ ...prev, balance: newBalance }));
-        if (user) {
-            await supabase.from('profiles').update({ balance: newBalance }).eq('id', user.id);
         }
     };
 
@@ -950,13 +616,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         saveGameToDb(type, reason);
         if (!user) return;
         let { data } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-        const updates = { ...data, score: data?.score || 100, balance: parseFloat(data?.balance || 0) };
-        const stake = currentStakeRef.current;
-        if (type === 'win') { updates.wins += 1; updates.score += 8; updates.balance += stake; }
-        if (type === 'loss') { updates.losses += 1; updates.score -= 8; updates.balance -= stake; }
+        const updates = { ...data, score: data?.score || 100 };
+        if (type === 'win') { updates.wins += 1; updates.score += 8; }
+        if (type === 'loss') { updates.losses += 1; updates.score -= 8; }
         if (type === 'draw') { updates.draws += 1; }
-        await supabase.from('profiles').update({ wins: updates.wins, losses: updates.losses, draws: updates.draws, score: updates.score, balance: updates.balance }).eq('id', user.id);
-        setStats(updates); setCurrentStake(0);
+        await supabase.from('profiles').update({ wins: updates.wins, losses: updates.losses, draws: updates.draws, score: updates.score }).eq('id', user.id);
+        setStats(updates);
     };
 
     const resetMatch = (timeControl = 300) => {
@@ -965,7 +630,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setIsGameOverManually(false); setIncomingDrawOffer(false); setChatMessages([]);
         setReplayInfo(null);
         setIsAutoPlaying(false);
-        endVoiceCall(false); // Cleanup any existing voice/video calls
+        endVoiceCall(false);
     };
 
     const handleLogoutClick = async () => {
@@ -989,6 +654,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         return () => window.removeEventListener('beforeunload', handleTabClose);
     }, [lobbyChannel]);
 
+    // ==========================================
+    // 📹 WEBRTC VIDEO CALL METHODS
+    // ==========================================
     const rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
     const startVoiceCall = async () => {
@@ -1058,12 +726,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                 setOnlineUsers(sortedOnlineUsers);
             })
             .on('broadcast', { event: 'challenge' }, ({ payload }) => {
-                if (userEmail && payload.targetEmail === userEmail) setIncomingChallenge({ email: payload.challengerEmail, timeControl: payload.timeControl, wagerAmount: payload.wagerAmount || 0 });
+                if (userEmail && payload.targetEmail === userEmail) setIncomingChallenge({ email: payload.challengerEmail, timeControl: payload.timeControl });
             })
             .on('broadcast', { event: 'accept' }, ({ payload }) => {
                 if (userEmail && payload.challengerEmail === userEmail) {
-                    setOpponent(payload.targetEmail); setIsPlayingComputer(false); setPlayerColor('w'); setCurrentStake(payload.wagerAmount || 0); resetMatch(payload.timeControl);
-                    setStatusKey("gameStarted"); setCustomStatus(` $${payload.wagerAmount || 0}`);
+                    setOpponent(payload.targetEmail); setIsPlayingComputer(false); setPlayerColor('w'); resetMatch(payload.timeControl);
+                    setStatusKey("gameStarted"); setCustomStatus("");
                     speak(t.gameStarted, language);
                 }
             })
@@ -1086,6 +754,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     if (speakChatEnabledRef.current && payload.text) speak(payload.text, language);
                 }
             })
+            // ==========================================
+            // 📡 WEBRTC SIGNALING HANDLERS
+            // ==========================================
             .on('broadcast', { event: 'webrtc-offer' }, async ({ payload }) => {
                 if (userEmail && payload.targetEmail === userEmail) {
                     try {
@@ -1255,6 +926,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         setChatMessages(prev => [...prev, { text: chatInput, sender: userEmail }]); setChatInput('');
     };
 
+    // ==========================================
+    // 🎤 PUSH TO TALK AUDIO RECORDING METHODS
+    // ==========================================
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -1313,10 +987,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const handleSendChallenge = async (targetEmail) => {
         if (!user) { alert("Please login to challenge players."); return; }
-        if (wagerAmount > stats.balance) { alert("Insufficient funds!"); return; }
         if (!lobbyChannel) return;
-        setStatusKey(""); setCustomStatus(`Challenge sent for $${wagerAmount}...`);
-        await lobbyChannel.send({ type: 'broadcast', event: 'challenge', payload: { challengerEmail: userEmail, targetEmail, timeControl: challengeTime, wagerAmount } });
+        setStatusKey(""); setCustomStatus(`Challenge sent...`);
+        await lobbyChannel.send({ type: 'broadcast', event: 'challenge', payload: { challengerEmail: userEmail, targetEmail, timeControl: challengeTime } });
     };
 
     const handleEmailChallenge = async (targetEmail) => {
@@ -1338,10 +1011,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const handleAcceptChallenge = async () => {
         if (!user || !lobbyChannel || !incomingChallenge) return;
-        if (stats.balance < incomingChallenge.wagerAmount) { alert("Insufficient funds!"); return; }
-        await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge.email, targetEmail: userEmail, timeControl: incomingChallenge.timeControl, wagerAmount: incomingChallenge.wagerAmount } });
-        setOpponent(incomingChallenge.email); setIsPlayingComputer(false); setPlayerColor('b'); setCurrentStake(incomingChallenge.wagerAmount); resetMatch(incomingChallenge.timeControl);
-        setStatusKey("gameStarted"); setCustomStatus(` $${incomingChallenge.wagerAmount}`);
+        await lobbyChannel.send({ type: 'broadcast', event: 'accept', payload: { challengerEmail: incomingChallenge.email, targetEmail: userEmail, timeControl: incomingChallenge.timeControl } });
+        setOpponent(incomingChallenge.email); setIsPlayingComputer(false); setPlayerColor('b'); resetMatch(incomingChallenge.timeControl);
+        setStatusKey("gameStarted"); setCustomStatus("");
         speak(t.gameStarted, language); setIncomingChallenge(null);
     };
 
@@ -1496,6 +1168,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     }
 
+    // 📩 Handle Game Share
     const handleShareGame = async (gameId) => {
         const targetEmail = window.prompt("Enter email address to send this game link to:");
         if (!targetEmail) return;
@@ -1518,6 +1191,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
         }
     };
 
+    // 🌐 Handle Social Media Share
     const handleSocialShare = (network, gameId) => {
         const gameLink = `https://chessonline.eu.com/?replay=${gameId}`;
         const encodedUrl = encodeURIComponent(gameLink);
@@ -1537,10 +1211,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     return (
         <div style={{ display: 'flex', height: '100vh', width: '100vw', backgroundColor: '#121212', color: 'white', fontFamily: 'Segoe UI', overflow: 'hidden' }}>
             <style>{`@keyframes shatterPiece { 0% { transform: translate(0, 0) scale(1) rotate(0deg); opacity: 1; } 70% { opacity: 0.8; } 100% { transform: translate(var(--tx), var(--ty)) scale(0.2) rotate(var(--rot)); opacity: 0; } }`}</style>
-
-            {showPaymentModal && user && <Elements stripe={stripePromise}><CheckoutForm amount={depositAmount} userId={user.id} onSuccess={handlePaymentSuccess} onCancel={() => setShowPaymentModal(false)} /></Elements>}
-
-            {showWithdrawModal && user && <WithdrawModal amount={withdrawAmount} userId={user.id} onSuccess={handleWithdrawSuccess} onCancel={() => setShowWithdrawModal(false)} />}
 
             {/* WATCH LIVE GAMES MODAL */}
             {showWatch && (
@@ -1659,6 +1329,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                     setPlayerColor('w');
                                                     setShowGamesPlayed(false);
 
+                                                    // 🔥 START THE AUTO-REPLAY AND TTS 🔥
                                                     setIsAutoPlaying(true);
                                                     speak("Watch the game and see all the moves", language);
                                                 }} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '8px 16px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}>{t.watch}</button>
@@ -1713,9 +1384,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
                         {user ? (
                             <>
-                                <span style={{ fontSize: '14px', color: '#10b981', fontWeight: 'bold' }}>{t.balance}: ${parseFloat(stats.balance || 0).toFixed(2)}</span>
-                                <button onClick={handleAddFundsClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{t.addFunds}</button>
-                                <button onClick={handleWithdrawClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f59e0b', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold' }}>{t.withdraw}</button>
                                 <span style={{ fontSize: '14px', whiteSpace: 'nowrap', display: isMobile ? 'none' : 'inline' }}>{t.loggedIn}: <b style={{ color: '#38bdf8' }}>{userEmail.split('@')[0]}</b></span>
                                 <button onClick={handleLogoutClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>{t.logout}</button>
                             </>
@@ -1749,7 +1417,7 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '560px', flexShrink: 0, margin: isMobile ? '0 auto' : '0' }}>
                         {incomingChallenge && (
                             <div style={{ backgroundColor: '#fbbf24', padding: '15px', borderRadius: '8px', marginBottom: '10px', color: '#121212', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '10px', width: '100%', boxSizing: 'border-box' }}>
-                                <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)}) for 💰 ${incomingChallenge.wagerAmount}</span>
+                                <span>⚔️ {incomingChallenge.email.split('@')[0]} challenged you! ({formatTime(incomingChallenge.timeControl)})</span>
                                 <button onClick={handleAcceptChallenge} style={{ backgroundColor: '#10b981', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>{t.acceptBtn}</button>
                                 <button onClick={handleDeclineChallenge} style={{ backgroundColor: '#ef4444', color: 'white', border: 'none', padding: '5px 10px', borderRadius: '4px', cursor: 'pointer' }}>{t.declineBtn}</button>
                             </div>
@@ -1854,10 +1522,6 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                                 <option value={1800}>30 Mins</option>
                                                 <option value={3600}>1 Hour</option>
                                             </select>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '5px', alignItems: 'center' }}>
-                                            <span style={{ fontSize: '10px', color: '#aaa', fontWeight: 'bold' }}>{t.wager}:</span>
-                                            <input disabled={!user} type="number" min="0" max={stats.balance || 0} value={wagerAmount} onChange={(e) => setWagerAmount(Number(e.target.value))} style={{ width: '60px', backgroundColor: '#333', color: '#10b981', border: '1px solid #444', borderRadius: '4px', fontSize: '11px', padding: '4px', outline: 'none', cursor: user ? 'text' : 'not-allowed' }} />
                                         </div>
                                     </div>
                                 )}
@@ -1980,22 +1644,10 @@ export default function App() {
     const [currentUser, setCurrentUser] = useState(null);
     const [language, setLanguage] = useState('EN');
     const [showAuthModal, setShowAuthModal] = useState(false);
-    const [showPasswordUpdateModal, setShowPasswordUpdateModal] = useState(false);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session) setCurrentUser(session.user);
-        });
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-            setCurrentUser(session?.user || null);
-
-            // Listen for password recovery events triggered when a user clicks the reset email link
-            if (event === 'PASSWORD_RECOVERY') {
-                setShowPasswordUpdateModal(true);
-            }
-        });
-
+        supabase.auth.getSession().then(({ data: { session } }) => { if (session) setCurrentUser(session.user); });
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setCurrentUser(s?.user || null));
         return () => subscription.unsubscribe();
     }, []);
 
@@ -2008,7 +1660,6 @@ export default function App() {
                 language={language}
                 setLanguage={setLanguage}
             />
-
             {showAuthModal && !currentUser && (
                 <AuthModal
                     onAuthSuccess={(user) => {
@@ -2016,13 +1667,6 @@ export default function App() {
                         setShowAuthModal(false);
                     }}
                     onClose={() => setShowAuthModal(false)}
-                    language={language}
-                />
-            )}
-
-            {showPasswordUpdateModal && (
-                <PasswordUpdateModal
-                    onClose={() => setShowPasswordUpdateModal(false)}
                     language={language}
                 />
             )}
