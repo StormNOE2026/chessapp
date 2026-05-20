@@ -212,8 +212,9 @@ function getBestMove(gameInstance, depth = 2) {
     return bestMove || moves[0];
 }
 
+
 // ==========================================
-// 🛡️ ADMIN EMAIL MODAL
+// 🛡️ ADMIN EMAIL MODAL (CORRECTED)
 // ==========================================
 function AdminEmailModal({ targetEmail, onClose }) {
     const [subject, setSubject] = useState('');
@@ -223,23 +224,38 @@ function AdminEmailModal({ targetEmail, onClose }) {
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
+
         try {
-            const { error } = await supabase.functions.invoke('admin-send-email', {
+            // 1. Get the current active session
+            const { data: { session } } = await supabase.auth.getSession();
+
+            if (!session) {
+                throw new Error("No active session. Please log in.");
+            }
+
+            // 2. Invoke the function, explicitly passing the Authorization header
+            const { data, error } = await supabase.functions.invoke('admin-send-email', {
                 body: {
                     to: targetEmail,
                     subject: subject,
                     message: message
+                },
+                headers: {
+                    Authorization: `Bearer ${session.access_token}`
                 }
             });
 
             if (error) throw error;
+
             alert("Email sent successfully!");
             onClose();
         } catch (err) {
             console.error("Admin Email error:", err);
-            alert("Failed to send email. Make sure 'admin-send-email' edge function is deployed.");
+            // This will now show the actual error coming from the Edge Function
+            alert("Failed to send email: " + (err.message || "Unknown error"));
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     return (
@@ -252,13 +268,15 @@ function AdminEmailModal({ targetEmail, onClose }) {
                     <input type="text" required placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
                     <textarea required placeholder="Message" value={message} onChange={(e) => setMessage(e.target.value)} rows="5" style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px', resize: 'vertical' }} />
                     <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#a855f7', color: 'white', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>
-                        {loading ? '...' : 'Send Email'}
+                        {loading ? 'Sending...' : 'Send Email'}
                     </button>
                 </form>
             </div>
         </div>
     );
 }
+
+
 
 // ==========================================
 // 🛡️ SUPPORT MODAL
