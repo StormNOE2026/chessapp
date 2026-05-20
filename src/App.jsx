@@ -221,19 +221,21 @@ function AdminEmailModal({ targetEmail, onClose }) {
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
+
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
 
         try {
-            // 1. Get the current active session
+            // 1. Get the current session directly from the auth object
             const { data: { session } } = await supabase.auth.getSession();
 
             if (!session) {
-                throw new Error("No active session. Please log in.");
+                throw new Error("You are not logged in. Please log in as sales@noirsoft.net.");
             }
 
-            // 2. Invoke the function, explicitly passing the Authorization header
+            // 2. Pass the token in the headers
             const { data, error } = await supabase.functions.invoke('admin-send-email', {
                 body: {
                     to: targetEmail,
@@ -251,8 +253,7 @@ function AdminEmailModal({ targetEmail, onClose }) {
             onClose();
         } catch (err) {
             console.error("Admin Email error:", err);
-            // This will now show the actual error coming from the Edge Function
-            alert("Failed to send email: " + (err.message || "Unknown error"));
+            alert(err.message);
         } finally {
             setLoading(false);
         }
