@@ -279,8 +279,10 @@ function AdminEmailModal({ targetEmail, onClose }) {
     );
 }
 
+
+
 // ==========================================
-// 🛡️ ALL PLAYER STATS MODAL (NEW)
+// 🛡️ ALL PLAYER STATS MODAL (UPDATED)
 // ==========================================
 function AllPlayerStatsModal({ onClose }) {
     const [profiles, setProfiles] = useState([]);
@@ -290,10 +292,11 @@ function AllPlayerStatsModal({ onClose }) {
         const fetchAllStats = async () => {
             setLoading(true);
             try {
+                // CHANGED: Ordered by 'email' (ascending: true) instead of 'score'
                 const { data, error } = await supabase
                     .from('profiles')
                     .select('*')
-                    .order('score', { ascending: false });
+                    .order('email', { ascending: true });
 
                 if (data) setProfiles(data);
             } catch (err) {
@@ -306,7 +309,10 @@ function AllPlayerStatsModal({ onClose }) {
 
     const getFlagEmoji = (countryCode) => {
         if (!countryCode) return '🌍';
-        const codePoints = countryCode.toUpperCase().split('').map(char => 127397 + char.charCodeAt(0));
+        const cleanCode = countryCode.trim().toUpperCase();
+        if (cleanCode.length !== 2) return '🌍';
+
+        const codePoints = cleanCode.split('').map(char => 127397 + char.charCodeAt(0));
         try {
             return String.fromCodePoint(...codePoints);
         } catch (e) {
@@ -338,7 +344,7 @@ function AllPlayerStatsModal({ onClose }) {
                             profiles.map(p => (
                                 <div key={p.id || p.email} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '10px', padding: '12px 10px', borderBottom: '1px solid #333', color: 'white', fontSize: '13px', alignItems: 'center', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#2a2a2a'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                                     <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email}</div>
-                                    <div style={{ textAlign: 'center', fontSize: '18px' }}>{getFlagEmoji(p.country || p.country_code)}</div>
+                                    <div style={{ textAlign: 'center', fontSize: '18px' }}>{getFlagEmoji(p.country_code || p.country)}</div>
                                     <div style={{ textAlign: 'center', fontWeight: 'bold' }}>{p.score !== undefined ? p.score : 100}</div>
                                     <div style={{ textAlign: 'center', color: '#10b981', fontWeight: 'bold' }}>{p.wins || 0}</div>
                                     <div style={{ textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>{p.losses || 0}</div>
@@ -352,6 +358,8 @@ function AllPlayerStatsModal({ onClose }) {
         </div>
     );
 }
+
+
 
 // ==========================================
 // 🛡️ PLAYER STATS MODAL
