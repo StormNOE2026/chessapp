@@ -37,6 +37,8 @@ const translations = {
         confirmEmailAlert: "Account created! Please check your email (and spam folder) to confirm your account before logging in.",
         spamNotice: "Note: Emails may sometimes land in your spam folder.",
         adminEmailBtn: "Send email to user",
+        playerStatsBtn: "Player stats",
+        allPlayerStatsBtn: "All player stats",
         selectMemberFirst: "Please select a member from the list first."
     },
     ES: {
@@ -69,6 +71,8 @@ const translations = {
         confirmEmailAlert: "¡Cuenta creada! Por favor revisa tu correo (y la carpeta de spam) para confirmar tu cuenta antes de iniciar sesión.",
         spamNotice: "Nota: A veces los correos pueden llegar a la carpeta de spam.",
         adminEmailBtn: "Enviar email a usuario",
+        playerStatsBtn: "Estadísticas de jugador",
+        allPlayerStatsBtn: "Estadísticas de todos",
         selectMemberFirst: "Por favor selecciona un miembro de la lista primero."
     },
     IT: {
@@ -101,6 +105,8 @@ const translations = {
         confirmEmailAlert: "Account creato! Controlla la tua email (e la cartella spam) per confermare l'account prima di accedere.",
         spamNotice: "Nota: Le email potrebbero finire nella cartella spam.",
         adminEmailBtn: "Invia email a utente",
+        playerStatsBtn: "Statistiche Giocatore",
+        allPlayerStatsBtn: "Statistiche di tutti",
         selectMemberFirst: "Per favore seleziona un membro dalla lista."
     }
 };
@@ -214,28 +220,24 @@ function getBestMove(gameInstance, depth = 2) {
 
 
 // ==========================================
-// 🛡️ ADMIN EMAIL MODAL (CORRECTED)
+// 🛡️ ADMIN EMAIL MODAL
 // ==========================================
 function AdminEmailModal({ targetEmail, onClose }) {
     const [subject, setSubject] = useState('');
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
-
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
 
         try {
-            // 1. Get the current session directly from the auth object
             const { data: { session } } = await supabase.auth.getSession();
 
             if (!session) {
                 throw new Error("You are not logged in. Please log in as sales@noirsoft.net.");
             }
 
-            // 2. Pass the token in the headers
             const { data, error } = await supabase.functions.invoke('admin-send-email', {
                 body: {
                     to: targetEmail,
@@ -277,7 +279,162 @@ function AdminEmailModal({ targetEmail, onClose }) {
     );
 }
 
+// ==========================================
+// 🛡️ ALL PLAYER STATS MODAL (NEW)
+// ==========================================
+function AllPlayerStatsModal({ onClose }) {
+    const [profiles, setProfiles] = useState([]);
+    const [loading, setLoading] = useState(true);
 
+    useEffect(() => {
+        const fetchAllStats = async () => {
+            setLoading(true);
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .order('score', { ascending: false });
+
+                if (data) setProfiles(data);
+            } catch (err) {
+                console.error("Error fetching all player stats:", err);
+            }
+            setLoading(false);
+        };
+        fetchAllStats();
+    }, []);
+
+    const getFlagEmoji = (countryCode) => {
+        if (!countryCode) return '🌍';
+        const codePoints = countryCode.toUpperCase().split('').map(char => 127397 + char.charCodeAt(0));
+        try {
+            return String.fromCodePoint(...codePoints);
+        } catch (e) {
+            return '🌍';
+        }
+    };
+
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
+            <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '95%', maxWidth: '800px', border: '1px solid #333', position: 'relative', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }}>
+                <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                <h2 style={{ textAlign: 'center', color: '#10b981', marginBottom: '20px', marginTop: 0 }}>All Player Statistics</h2>
+
+                {loading ? (
+                    <div style={{ textAlign: 'center', color: '#aaa', padding: '20px' }}>Loading stats...</div>
+                ) : (
+                    <div style={{ overflowY: 'auto', flexGrow: 1, borderTop: '1px solid #333', borderBottom: '1px solid #333' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '10px', padding: '12px 10px', borderBottom: '1px solid #444', fontWeight: 'bold', color: '#38bdf8', backgroundColor: '#2c2c2c', position: 'sticky', top: 0, zIndex: 1 }}>
+                            <div>Email</div>
+                            <div style={{ textAlign: 'center' }}>Flag</div>
+                            <div style={{ textAlign: 'center' }}>Score</div>
+                            <div style={{ textAlign: 'center' }}>Wins</div>
+                            <div style={{ textAlign: 'center' }}>Losses</div>
+                            <div style={{ textAlign: 'center' }}>Draws</div>
+                        </div>
+                        {profiles.length === 0 ? (
+                            <div style={{ textAlign: 'center', color: '#666', padding: '20px' }}>No players found.</div>
+                        ) : (
+                            profiles.map(p => (
+                                <div key={p.id || p.email} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr 1fr', gap: '10px', padding: '12px 10px', borderBottom: '1px solid #333', color: 'white', fontSize: '13px', alignItems: 'center', transition: 'background-color 0.2s' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#2a2a2a'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                    <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.email}</div>
+                                    <div style={{ textAlign: 'center', fontSize: '18px' }}>{getFlagEmoji(p.country || p.country_code)}</div>
+                                    <div style={{ textAlign: 'center', fontWeight: 'bold' }}>{p.score !== undefined ? p.score : 100}</div>
+                                    <div style={{ textAlign: 'center', color: '#10b981', fontWeight: 'bold' }}>{p.wins || 0}</div>
+                                    <div style={{ textAlign: 'center', color: '#ef4444', fontWeight: 'bold' }}>{p.losses || 0}</div>
+                                    <div style={{ textAlign: 'center', color: '#aaa', fontWeight: 'bold' }}>{p.draws || 0}</div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ==========================================
+// 🛡️ PLAYER STATS MODAL
+// ==========================================
+function PlayerStatsModal({ targetEmail, onClose }) {
+    const [games, setGames] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [profileStats, setProfileStats] = useState({ wins: 0, losses: 0, draws: 0, score: 0 });
+
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
+            try {
+                // Fetch Profile aggregate stats
+                const { data: profile } = await supabase.from('profiles').select('*').eq('email', targetEmail).single();
+                if (profile) {
+                    setProfileStats({ wins: profile.wins || 0, losses: profile.losses || 0, draws: profile.draws || 0, score: profile.score || 100 });
+                }
+
+                // Fetch full Game history where this user participated
+                const { data: gamesData } = await supabase
+                    .from('games')
+                    .select('*')
+                    .or(`white_email.eq.${targetEmail},black_email.eq.${targetEmail}`)
+                    .order('created_at', { ascending: false });
+
+                if (gamesData) setGames(gamesData);
+            } catch (err) {
+                console.error("Error fetching player stats:", err);
+            }
+            setLoading(false);
+        };
+        fetchData();
+    }, [targetEmail]);
+
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
+            <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '600px', border: '1px solid #333', position: 'relative', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+                <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                <h2 style={{ textAlign: 'center', color: '#3b82f6', marginBottom: '10px', marginTop: 0 }}>Player Statistics</h2>
+                <p style={{ color: '#aaa', fontSize: '14px', textAlign: 'center', marginTop: '0', marginBottom: '20px' }}><b>{targetEmail}</b></p>
+
+                {loading ? (
+                    <div style={{ textAlign: 'center', color: '#aaa' }}>Loading stats...</div>
+                ) : (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-around', backgroundColor: '#2c2c2c', padding: '15px', borderRadius: '8px', marginBottom: '20px', textAlign: 'center' }}>
+                            <div><div style={{ color: '#38bdf8', fontSize: '11px', textTransform: 'uppercase' }}>Score</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{profileStats.score}</div></div>
+                            <div><div style={{ color: '#10b981', fontSize: '11px', textTransform: 'uppercase' }}>Wins</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{profileStats.wins}</div></div>
+                            <div><div style={{ color: '#ef4444', fontSize: '11px', textTransform: 'uppercase' }}>Losses</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{profileStats.losses}</div></div>
+                            <div><div style={{ color: '#aaa', fontSize: '11px', textTransform: 'uppercase' }}>Draws</div><div style={{ fontSize: '20px', fontWeight: 'bold' }}>{profileStats.draws}</div></div>
+                        </div>
+
+                        <h4 style={{ color: '#aaa', margin: '0 0 10px 0' }}>Game History</h4>
+                        <div style={{ overflowY: 'auto', flexGrow: 1, borderTop: '1px solid #333', paddingTop: '10px', paddingRight: '5px' }}>
+                            {games.length === 0 ? (
+                                <div style={{ textAlign: 'center', color: '#666', padding: '20px' }}>No games played yet.</div>
+                            ) : (
+                                games.map(g => {
+                                    const dateStr = g.created_at ? new Date(g.created_at).toLocaleString() : 'Unknown Date';
+                                    const isWhite = g.white_email === targetEmail;
+                                    const opponent = isWhite ? g.black_email?.split('@')[0] : g.white_email?.split('@')[0];
+
+                                    return (
+                                        <div key={g.id} style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#2c2c2c', padding: '10px 15px', marginBottom: '8px', borderRadius: '6px' }}>
+                                            <div style={{ fontSize: '14px', fontWeight: 'bold', color: 'white', marginBottom: '4px' }}>
+                                                {isWhite ? '⬜' : '⬛'} vs {opponent || 'Guest'}
+                                            </div>
+                                            <div style={{ fontSize: '12px', color: '#aaa', display: 'flex', justifyContent: 'space-between' }}>
+                                                <span>{dateStr}</span>
+                                                <span style={{ color: '#f59e0b', fontWeight: 'bold' }}>{g.result?.toUpperCase()}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </>
+                )}
+            </div>
+        </div>
+    );
+}
 
 // ==========================================
 // 🛡️ SUPPORT MODAL
@@ -298,7 +455,7 @@ function SupportModal({ user, onClose, language }) {
                     name: name,
                     message: message,
                     to: 'sales@noirsoft.net',
-                    ccUser: true // Backend uses this to send a copy via Postmark/Resend
+                    ccUser: true
                 }
             });
 
@@ -403,9 +560,8 @@ function AuthModal({ onAuthSuccess, onClose, language }) {
         if (error) {
             alert(error.message);
         } else if (!isLogin) {
-            // Tell user to check their email/spam for the confirmation link
             alert(t.confirmEmailAlert);
-            setIsLogin(true); // Switch to login screen so they can log in once verified
+            setIsLogin(true);
         } else if (data?.user) {
             onAuthSuccess(data.user);
         }
@@ -496,6 +652,8 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     // NEW STATE: Admin Member Selection and Email Modal
     const [selectedMemberEmail, setSelectedMemberEmail] = useState(null);
     const [showAdminEmailModal, setShowAdminEmailModal] = useState(false);
+    const [showPlayerStatsModal, setShowPlayerStatsModal] = useState(false);
+    const [showAllPlayerStatsModal, setShowAllPlayerStatsModal] = useState(false);
 
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
@@ -725,12 +883,37 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
     const fetchUserStats = async () => {
         if (!user) return;
+
         let { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+
         if (data) {
-            setStats({ wins: data.wins || 0, losses: data.losses || 0, draws: data.draws || 0, score: data.score !== undefined ? data.score : 100 });
+            // If the user doesn't have a country code saved yet, fetch it and update the database
+            if (!data.country_code && !data.country) {
+                try {
+                    const res = await fetch('https://ipapi.co/json/');
+                    if (res.ok) {
+                        const locationData = await res.json();
+                        if (locationData.country_code) {
+                            // Save to Supabase
+                            await supabase
+                                .from('profiles')
+                                .update({ country_code: locationData.country_code })
+                                .eq('id', user.id);
+                        }
+                    }
+                } catch (e) {
+                    console.error("Error fetching/saving country code:", e);
+                }
+            }
+
+            setStats({
+                wins: data.wins || 0,
+                losses: data.losses || 0,
+                draws: data.draws || 0,
+                score: data.score !== undefined ? data.score : 100
+            });
         }
     };
-
     const fetchNews = async () => {
         setIsLoadingNews(true);
         try {
@@ -1603,12 +1786,25 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                         {user ? (
                             <>
                                 {userEmail === 'sales@noirsoft.net' && (
-                                    <button onClick={() => {
-                                        if (!selectedMemberEmail) alert(t.selectMemberFirst);
-                                        else setShowAdminEmailModal(true);
-                                    }} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#a855f7', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                                        {t.adminEmailBtn}
-                                    </button>
+                                    <>
+                                        <button onClick={() => setShowAllPlayerStatsModal(true)} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#10b981', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                            {t.allPlayerStatsBtn}
+                                        </button>
+
+                                        <button onClick={() => {
+                                            if (!selectedMemberEmail) alert(t.selectMemberFirst);
+                                            else setShowPlayerStatsModal(true);
+                                        }} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#3b82f6', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                            {t.playerStatsBtn}
+                                        </button>
+
+                                        <button onClick={() => {
+                                            if (!selectedMemberEmail) alert(t.selectMemberFirst);
+                                            else setShowAdminEmailModal(true);
+                                        }} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#a855f7', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                            {t.adminEmailBtn}
+                                        </button>
+                                    </>
                                 )}
                                 <span style={{ fontSize: '14px', whiteSpace: 'nowrap', display: isMobile ? 'none' : 'inline' }}>{t.loggedIn}: <b style={{ color: '#38bdf8' }}>{userEmail.split('@')[0]}</b></span>
                                 <button onClick={handleLogoutClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>{t.logout}</button>
@@ -1865,6 +2061,21 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     </div>
                 </footer>
             </div>
+
+            {/* Render the All Player Stats Modal when active */}
+            {showAllPlayerStatsModal && userEmail === 'sales@noirsoft.net' && (
+                <AllPlayerStatsModal
+                    onClose={() => setShowAllPlayerStatsModal(false)}
+                />
+            )}
+
+            {/* Render the Player Stats Modal when active */}
+            {showPlayerStatsModal && userEmail === 'sales@noirsoft.net' && selectedMemberEmail && (
+                <PlayerStatsModal
+                    targetEmail={selectedMemberEmail}
+                    onClose={() => setShowPlayerStatsModal(false)}
+                />
+            )}
 
             {/* Render the Admin Email Modal when active */}
             {showAdminEmailModal && userEmail === 'sales@noirsoft.net' && selectedMemberEmail && (
