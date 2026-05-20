@@ -30,9 +30,12 @@ const translations = {
         opponentDisconnected: "Opponent disconnected. You Win!",
         startCall: "📹 Start Video", endCall: "🔴 Stop Video",
         forgotPassword: "Forgot Password?", resetPassword: "Reset Password", sendResetLink: "Send Reset Link",
-        resetEmailSent: "Reset link sent! Check your email.", newPassword: "New Password", updatePassword: "Update Password",
+        resetEmailSent: "Reset link sent! Check your email (and spam folder).", newPassword: "New Password", updatePassword: "Update Password",
         passwordUpdated: "Password updated successfully!",
-        support: "Support", supportName: "Your Name", supportMessage: "Message", sendSupport: "Send to Support", supportSent: "Support message sent successfully!"
+        support: "Support", supportName: "Your Name", supportMessage: "Message", sendSupport: "Send to Support",
+        supportSent: "Support message sent successfully! Check your email (and spam folder) for a copy.",
+        confirmEmailAlert: "Account created! Please check your email (and spam folder) to confirm your account before logging in.",
+        spamNotice: "Note: Emails may sometimes land in your spam folder."
     },
     ES: {
         balance: "Saldo", addFunds: "Añadir Fondos", withdraw: "Retirar", insufficientFunds: "Fondos insuficientes.", loggedIn: "Conectado", logout: "Salir",
@@ -57,9 +60,12 @@ const translations = {
         opponentDisconnected: "El oponente se desconectó. ¡Tú ganas!",
         startCall: "📹 Video", endCall: "🔴 Colgar",
         forgotPassword: "¿Olvidaste tu contraseña?", resetPassword: "Restablecer Contraseña", sendResetLink: "Enviar Enlace",
-        resetEmailSent: "¡Enlace enviado! Revisa tu correo.", newPassword: "Nueva Contraseña", updatePassword: "Actualizar Contraseña",
+        resetEmailSent: "¡Enlace enviado! Revisa tu correo (y carpeta de spam).", newPassword: "Nueva Contraseña", updatePassword: "Actualizar Contraseña",
         passwordUpdated: "¡Contraseña actualizada con éxito!",
-        support: "Soporte", supportName: "Tu Nombre", supportMessage: "Mensaje", sendSupport: "Enviar a Soporte", supportSent: "¡Mensaje de soporte enviado con éxito!"
+        support: "Soporte", supportName: "Tu Nombre", supportMessage: "Mensaje", sendSupport: "Enviar a Soporte",
+        supportSent: "¡Mensaje de soporte enviado! Revisa tu correo (y spam) para ver una copia.",
+        confirmEmailAlert: "¡Cuenta creada! Por favor revisa tu correo (y la carpeta de spam) para confirmar tu cuenta antes de iniciar sesión.",
+        spamNotice: "Nota: A veces los correos pueden llegar a la carpeta de spam."
     },
     IT: {
         balance: "Saldo", addFunds: "Aggiungi Fondi", withdraw: "Ritira", insufficientFunds: "Fondi insufficienti.", loggedIn: "Connesso", logout: "Esci",
@@ -84,9 +90,12 @@ const translations = {
         opponentDisconnected: "Avversario disconnesso. Hai Vinto!",
         startCall: "📹 Video", endCall: "🔴 Chiudi",
         forgotPassword: "Password dimenticata?", resetPassword: "Reimposta Password", sendResetLink: "Invia Link",
-        resetEmailSent: "Link inviato! Controlla l'email.", newPassword: "Nuova Password", updatePassword: "Aggiorna Password",
+        resetEmailSent: "Link inviato! Controlla l'email (e lo spam).", newPassword: "Nuova Password", updatePassword: "Aggiorna Password",
         passwordUpdated: "Password aggiornata con successo!",
-        support: "Supporto", supportName: "Il tuo nome", supportMessage: "Messaggio", sendSupport: "Invia al Supporto", supportSent: "Messaggio di supporto inviato con successo!"
+        support: "Supporto", supportName: "Il tuo nome", supportMessage: "Messaggio", sendSupport: "Invia al Supporto",
+        supportSent: "Messaggio di supporto inviato! Controlla la tua email (e lo spam) per una copia.",
+        confirmEmailAlert: "Account creato! Controlla la tua email (e la cartella spam) per confermare l'account prima di accedere.",
+        spamNotice: "Nota: Le email potrebbero finire nella cartella spam."
     }
 };
 
@@ -216,7 +225,7 @@ function SupportModal({ user, onClose, language }) {
                     name: name,
                     message: message,
                     to: 'sales@noirsoft.net',
-                    ccUser: true // Backend uses this to send a copy via Postmark
+                    ccUser: true // Backend uses this to send a copy via Postmark/Resend
                 }
             });
 
@@ -243,6 +252,9 @@ function SupportModal({ user, onClose, language }) {
                         {loading ? '...' : t.sendSupport}
                     </button>
                 </form>
+                <div style={{ color: '#aaa', fontSize: '11px', textAlign: 'center', marginTop: '12px' }}>
+                    {t.spamNotice}
+                </div>
             </div>
         </div>
     );
@@ -314,8 +326,16 @@ function AuthModal({ onAuthSuccess, onClose, language }) {
             : await supabase.auth.signUp({ email: cleanEmail, password });
 
         setLoading(false);
-        if (error) alert(error.message);
-        else if (data?.user) onAuthSuccess(data.user);
+
+        if (error) {
+            alert(error.message);
+        } else if (!isLogin) {
+            // Tell user to check their email/spam for the confirmation link
+            alert(t.confirmEmailAlert);
+            setIsLogin(true); // Switch to login screen so they can log in once verified
+        } else if (data?.user) {
+            onAuthSuccess(data.user);
+        }
     };
 
     return (
@@ -344,6 +364,12 @@ function AuthModal({ onAuthSuccess, onClose, language }) {
                         {loading ? '...' : (isForgotPassword ? t.sendResetLink : (isLogin ? t.login : t.signup))}
                     </button>
                 </form>
+
+                {(!isLogin && !isForgotPassword) && (
+                    <div style={{ color: '#aaa', fontSize: '11px', textAlign: 'center', marginTop: '15px' }}>
+                        {t.spamNotice}
+                    </div>
+                )}
 
                 <div style={{ textAlign: 'center', marginTop: '20px', color: '#aaa', fontSize: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                     {!isForgotPassword && (
