@@ -31,7 +31,8 @@ const translations = {
         startCall: "📹 Start Video", endCall: "🔴 Stop Video",
         forgotPassword: "Forgot Password?", resetPassword: "Reset Password", sendResetLink: "Send Reset Link",
         resetEmailSent: "Reset link sent! Check your email.", newPassword: "New Password", updatePassword: "Update Password",
-        passwordUpdated: "Password updated successfully!"
+        passwordUpdated: "Password updated successfully!",
+        support: "Support", supportName: "Your Name", supportMessage: "Message", sendSupport: "Send to Support", supportSent: "Support message sent successfully!"
     },
     ES: {
         balance: "Saldo", addFunds: "Añadir Fondos", withdraw: "Retirar", insufficientFunds: "Fondos insuficientes.", loggedIn: "Conectado", logout: "Salir",
@@ -57,7 +58,8 @@ const translations = {
         startCall: "📹 Video", endCall: "🔴 Colgar",
         forgotPassword: "¿Olvidaste tu contraseña?", resetPassword: "Restablecer Contraseña", sendResetLink: "Enviar Enlace",
         resetEmailSent: "¡Enlace enviado! Revisa tu correo.", newPassword: "Nueva Contraseña", updatePassword: "Actualizar Contraseña",
-        passwordUpdated: "¡Contraseña actualizada con éxito!"
+        passwordUpdated: "¡Contraseña actualizada con éxito!",
+        support: "Soporte", supportName: "Tu Nombre", supportMessage: "Mensaje", sendSupport: "Enviar a Soporte", supportSent: "¡Mensaje de soporte enviado con éxito!"
     },
     IT: {
         balance: "Saldo", addFunds: "Aggiungi Fondi", withdraw: "Ritira", insufficientFunds: "Fondi insufficienti.", loggedIn: "Connesso", logout: "Esci",
@@ -83,7 +85,8 @@ const translations = {
         startCall: "📹 Video", endCall: "🔴 Chiudi",
         forgotPassword: "Password dimenticata?", resetPassword: "Reimposta Password", sendResetLink: "Invia Link",
         resetEmailSent: "Link inviato! Controlla l'email.", newPassword: "Nuova Password", updatePassword: "Aggiorna Password",
-        passwordUpdated: "Password aggiornata con successo!"
+        passwordUpdated: "Password aggiornata con successo!",
+        support: "Supporto", supportName: "Il tuo nome", supportMessage: "Messaggio", sendSupport: "Invia al Supporto", supportSent: "Messaggio di supporto inviato con successo!"
     }
 };
 
@@ -192,6 +195,57 @@ function getBestMove(gameInstance, depth = 2) {
         }
     }
     return bestMove || moves[0];
+}
+
+// ==========================================
+// 🛡️ SUPPORT MODAL
+// ==========================================
+function SupportModal({ user, onClose, language }) {
+    const t = translations[language] || translations.EN;
+    const [name, setName] = useState('');
+    const [message, setMessage] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const { error } = await supabase.functions.invoke('send-support-email', {
+                body: {
+                    userEmail: user.email,
+                    name: name,
+                    message: message,
+                    to: 'sales@noirsoft.net',
+                    ccUser: true // Backend uses this to send a copy via Postmark
+                }
+            });
+
+            if (error) throw error;
+            alert(t.supportSent);
+            onClose();
+        } catch (err) {
+            console.error("Support error:", err);
+            alert("Failed to send message. Please try again.");
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
+            <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '400px', border: '1px solid #333', position: 'relative' }}>
+                <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                <h2 style={{ textAlign: 'center', color: '#38bdf8', marginBottom: '20px', marginTop: 0 }}>{t.support}</h2>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <input type="email" value={user?.email || ''} disabled style={{ padding: '10px', backgroundColor: '#333', color: '#aaa', border: '1px solid #444', borderRadius: '4px', cursor: 'not-allowed' }} />
+                    <input type="text" required placeholder={t.supportName} value={name} onChange={(e) => setName(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    <textarea required placeholder={t.supportMessage} value={message} onChange={(e) => setMessage(e.target.value)} rows="5" style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px', resize: 'vertical' }} />
+                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#38bdf8', color: 'black', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>
+                        {loading ? '...' : t.sendSupport}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
 }
 
 // ==========================================
@@ -343,6 +397,9 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
     const chatContainerRef = useRef(null);
+
+    // Modal state for support
+    const [showSupportModal, setShowSupportModal] = useState(false);
 
     // ==========================================
     // 📹 WEBRTC LIVE VIDEO CHAT STATE
@@ -1444,9 +1501,12 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                             <>
                                 <span style={{ fontSize: '14px', whiteSpace: 'nowrap', display: isMobile ? 'none' : 'inline' }}>{t.loggedIn}: <b style={{ color: '#38bdf8' }}>{userEmail.split('@')[0]}</b></span>
                                 <button onClick={handleLogoutClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>{t.logout}</button>
+                                <button onClick={() => setShowSupportModal(true)} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f97316', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{t.support}</button>
                             </>
                         ) : (
-                            <button onClick={onLoginClick} style={{ fontSize: '13px', padding: '6px 16px', cursor: 'pointer', backgroundColor: '#38bdf8', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{t.login}</button>
+                            <>
+                                <button onClick={onLoginClick} style={{ fontSize: '13px', padding: '6px 16px', cursor: 'pointer', backgroundColor: '#38bdf8', color: 'black', border: 'none', borderRadius: '4px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{t.login}</button>
+                            </>
                         )}
                     </div>
                 </header>
@@ -1694,6 +1754,15 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     </div>
                 </footer>
             </div>
+
+            {/* Render the Support Modal when active */}
+            {showSupportModal && user && (
+                <SupportModal
+                    user={user}
+                    onClose={() => setShowSupportModal(false)}
+                    language={language}
+                />
+            )}
         </div>
     );
 }
