@@ -35,7 +35,9 @@ const translations = {
         support: "Support", supportName: "Your Name", supportMessage: "Message", sendSupport: "Send to Support",
         supportSent: "Support message sent successfully! Check your email (and spam folder) for a copy.",
         confirmEmailAlert: "Account created! Please check your email (and spam folder) to confirm your account before logging in.",
-        spamNotice: "Note: Emails may sometimes land in your spam folder."
+        spamNotice: "Note: Emails may sometimes land in your spam folder.",
+        adminEmailBtn: "Send email to user",
+        selectMemberFirst: "Please select a member from the list first."
     },
     ES: {
         balance: "Saldo", addFunds: "Añadir Fondos", withdraw: "Retirar", insufficientFunds: "Fondos insuficientes.", loggedIn: "Conectado", logout: "Salir",
@@ -65,7 +67,9 @@ const translations = {
         support: "Soporte", supportName: "Tu Nombre", supportMessage: "Mensaje", sendSupport: "Enviar a Soporte",
         supportSent: "¡Mensaje de soporte enviado! Revisa tu correo (y spam) para ver una copia.",
         confirmEmailAlert: "¡Cuenta creada! Por favor revisa tu correo (y la carpeta de spam) para confirmar tu cuenta antes de iniciar sesión.",
-        spamNotice: "Nota: A veces los correos pueden llegar a la carpeta de spam."
+        spamNotice: "Nota: A veces los correos pueden llegar a la carpeta de spam.",
+        adminEmailBtn: "Enviar email a usuario",
+        selectMemberFirst: "Por favor selecciona un miembro de la lista primero."
     },
     IT: {
         balance: "Saldo", addFunds: "Aggiungi Fondi", withdraw: "Ritira", insufficientFunds: "Fondi insufficienti.", loggedIn: "Connesso", logout: "Esci",
@@ -95,7 +99,9 @@ const translations = {
         support: "Supporto", supportName: "Il tuo nome", supportMessage: "Messaggio", sendSupport: "Invia al Supporto",
         supportSent: "Messaggio di supporto inviato! Controlla la tua email (e lo spam) per una copia.",
         confirmEmailAlert: "Account creato! Controlla la tua email (e la cartella spam) per confermare l'account prima di accedere.",
-        spamNotice: "Nota: Le email potrebbero finire nella cartella spam."
+        spamNotice: "Nota: Le email potrebbero finire nella cartella spam.",
+        adminEmailBtn: "Invia email a utente",
+        selectMemberFirst: "Per favore seleziona un membro dalla lista."
     }
 };
 
@@ -204,6 +210,54 @@ function getBestMove(gameInstance, depth = 2) {
         }
     }
     return bestMove || moves[0];
+}
+
+// ==========================================
+// 🛡️ ADMIN EMAIL MODAL
+// ==========================================
+function AdminEmailModal({ targetEmail, onClose }) {
+    const [subject, setSubject] = useState('');
+    const [message, setMessage] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            const { error } = await supabase.functions.invoke('admin-send-email', {
+                body: {
+                    to: targetEmail,
+                    subject: subject,
+                    message: message
+                }
+            });
+
+            if (error) throw error;
+            alert("Email sent successfully!");
+            onClose();
+        } catch (err) {
+            console.error("Admin Email error:", err);
+            alert("Failed to send email. Make sure 'admin-send-email' edge function is deployed.");
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', backgroundColor: 'rgba(0,0,0,0.8)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 10000, fontFamily: 'Segoe UI' }}>
+            <div style={{ backgroundColor: '#1e1e1e', padding: '30px', borderRadius: '8px', width: '90%', maxWidth: '400px', border: '1px solid #333', position: 'relative' }}>
+                <button onClick={onClose} style={{ position: 'absolute', top: '10px', right: '15px', background: 'none', border: 'none', color: '#888', fontSize: '20px', cursor: 'pointer' }}>✖</button>
+                <h2 style={{ textAlign: 'center', color: '#a855f7', marginBottom: '10px', marginTop: 0 }}>Send Email</h2>
+                <p style={{ color: '#aaa', fontSize: '13px', textAlign: 'center', marginTop: '0', marginBottom: '20px' }}>To: <b>{targetEmail}</b></p>
+                <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                    <input type="text" required placeholder="Subject" value={subject} onChange={(e) => setSubject(e.target.value)} style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px' }} />
+                    <textarea required placeholder="Message" value={message} onChange={(e) => setMessage(e.target.value)} rows="5" style={{ padding: '10px', backgroundColor: '#2c2c2c', color: 'white', border: '1px solid #444', borderRadius: '4px', resize: 'vertical' }} />
+                    <button disabled={loading} type="submit" style={{ padding: '12px', backgroundColor: '#a855f7', color: 'white', fontWeight: 'bold', cursor: 'pointer', border: 'none', borderRadius: '4px' }}>
+                        {loading ? '...' : 'Send Email'}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
 }
 
 // ==========================================
@@ -419,6 +473,10 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
     const [lobbyChannel, setLobbyChannel] = useState(null);
     const [incomingChallenge, setIncomingChallenge] = useState(null);
     const [incomingDrawOffer, setIncomingDrawOffer] = useState(false);
+
+    // NEW STATE: Admin Member Selection and Email Modal
+    const [selectedMemberEmail, setSelectedMemberEmail] = useState(null);
+    const [showAdminEmailModal, setShowAdminEmailModal] = useState(false);
 
     const [chatMessages, setChatMessages] = useState([]);
     const [chatInput, setChatInput] = useState('');
@@ -1525,6 +1583,14 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
 
                         {user ? (
                             <>
+                                {userEmail === 'sales@noirsoft.net' && (
+                                    <button onClick={() => {
+                                        if (!selectedMemberEmail) alert(t.selectMemberFirst);
+                                        else setShowAdminEmailModal(true);
+                                    }} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#a855f7', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                                        {t.adminEmailBtn}
+                                    </button>
+                                )}
                                 <span style={{ fontSize: '14px', whiteSpace: 'nowrap', display: isMobile ? 'none' : 'inline' }}>{t.loggedIn}: <b style={{ color: '#38bdf8' }}>{userEmail.split('@')[0]}</b></span>
                                 <button onClick={handleLogoutClick} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#333', color: 'white', border: '1px solid #555', borderRadius: '4px', whiteSpace: 'nowrap' }}>{t.logout}</button>
                                 <button onClick={() => setShowSupportModal(true)} style={{ fontSize: '13px', padding: '6px 12px', cursor: 'pointer', backgroundColor: '#f97316', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>{t.support}</button>
@@ -1670,17 +1736,17 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                                     </div>
                                 )}
                                 {viewMode === 'online' && onlineUsers.map((u, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 0' }}>
+                                    <div key={i} onClick={() => setSelectedMemberEmail(u.email)} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', backgroundColor: selectedMemberEmail === u.email ? '#444' : 'transparent', transition: 'background-color 0.2s' }}>
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span>
-                                        {u.email !== userEmail && user && <button onClick={() => handleSendChallenge(u.email)} style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#38bdf8', color: '#000', border: 'none', borderRadius: '3px', padding: '2px 5px' }}>{t.challengeBtn}</button>}
+                                        {u.email !== userEmail && user && <button onClick={(e) => { e.stopPropagation(); handleSendChallenge(u.email); }} style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#38bdf8', color: '#000', border: 'none', borderRadius: '3px', padding: '2px 5px' }}>{t.challengeBtn}</button>}
                                     </div>
                                 ))}
                                 {viewMode === 'all' && allMembers.map((u, i) => (
-                                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', padding: '4px 0', borderBottom: '1px solid #333' }}>
+                                    <div key={i} onClick={() => setSelectedMemberEmail(u.email)} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '12px', padding: '4px 8px', borderBottom: '1px solid #333', cursor: 'pointer', backgroundColor: selectedMemberEmail === u.email ? '#444' : 'transparent', transition: 'background-color 0.2s' }}>
                                         <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email.split('@')[0]}</span>
                                         {u.email !== userEmail && user && (
                                             <button
-                                                onClick={() => handleEmailChallenge(u.email)}
+                                                onClick={(e) => { e.stopPropagation(); handleEmailChallenge(u.email); }}
                                                 style={{ fontSize: '9px', cursor: 'pointer', backgroundColor: '#f97316', color: '#fff', border: 'none', borderRadius: '3px', padding: '2px 5px', whiteSpace: 'nowrap' }}
                                             >
                                                 {t.emailChallenge} ({challengeTime === 3600 ? '1h' : (challengeTime / 60) + 'm'})
@@ -1780,6 +1846,14 @@ function ChessGame({ user, onLogout, onLoginClick, language, setLanguage }) {
                     </div>
                 </footer>
             </div>
+
+            {/* Render the Admin Email Modal when active */}
+            {showAdminEmailModal && userEmail === 'sales@noirsoft.net' && selectedMemberEmail && (
+                <AdminEmailModal
+                    targetEmail={selectedMemberEmail}
+                    onClose={() => setShowAdminEmailModal(false)}
+                />
+            )}
 
             {/* Render the Support Modal when active */}
             {showSupportModal && user && (
